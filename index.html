@@ -103,9 +103,12 @@
             opacity: 0.9;
         }
 
+        /* 💡 개편된 밸류체인 아코디언 서브테이블 (시인성 극대화) */
         .subtable-row {
-            background-color: #0c1628 !important;
-            border-left: 3px solid #f59e0b;
+            background-color: #131f36 !important;
+            border-left: 4px solid #f59e0b;
+            border-top: 1px solid rgba(245, 158, 11, 0.3);
+            border-bottom: 1px solid rgba(245, 158, 11, 0.3);
         }
 
         .industry-card-active {
@@ -180,7 +183,7 @@
             </div>
         </div>
 
-        <!-- 오른쪽: 분석 후보 전체 리스트 (6개 시계열 컬럼: 5일, 10일, 30일, 3개월, 6개월, 1년) -->
+        <!-- 오른쪽: 분석 후보 전체 리스트 (6개 시계열 컬럼) -->
         <div class="lg:col-span-9">
             <div class="table-container p-5 rounded-xl">
                 <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
@@ -191,7 +194,7 @@
                             <span class="text-cyan-400" id="table-total-count">0종목</span>
                             <button id="btn-reset-filter" onclick="clearIndustryFilter()" class="hidden ml-2 text-xs bg-gray-800 text-gray-300 hover:text-white px-2 py-0.5 rounded border border-gray-700">전체보기 ✕</button>
                         </h2>
-                        <div class="text-xs text-amber-400/90 mt-0.5">💡 [대장주 ▾]를 누르면 하위 수혜 밸류체인과 키맞추기 룸이 펼쳐집니다.</div>
+                        <div class="text-xs text-amber-400/90 mt-0.5">💡 [대장주 ▾]를 누르면 하위 수혜 밸류체인과 키맞추기 룸이 명확하게 펼쳐집니다.</div>
                     </div>
                     
                     <div class="flex flex-wrap items-center gap-1.5">
@@ -268,7 +271,7 @@
                     <p class="text-xs text-gray-300 leading-relaxed" id="modal-ai-briefing">종합 분석 내용을 불러오는 중입니다...</p>
                 </div>
 
-                <!-- 6개 시계열 수익률 그리드 (5일, 10일, 30일, 3개월, 6개월, 1년) -->
+                <!-- 6개 시계열 수익률 그리드 -->
                 <div>
                     <div class="text-xs font-bold text-gray-300 mb-2 flex items-center justify-between">
                         <span>📈 6개 시계열 수익률 & 기술적 지표</span>
@@ -433,43 +436,58 @@
                     </tr>
                 `;
 
+                /* 💡 대장주 클릭 시 펼쳐지는 하위 수혜 밸류체인 영역 (가독성 및 대비감 강화) */
                 if (expandedLeaderSector === item.industry && item.role === '대장주') {
                     const subStocks = rawStocks.filter(x => x.industry === item.industry && x.code !== item.code);
                     html += `
                         <tr class="subtable-row">
-                            <td colspan="14" class="p-4">
-                                <div class="text-xs font-bold text-amber-400 mb-2 flex items-center justify-between">
-                                    <span>👑 [${item.name}] 대장주 연계 밸류체인 낙수 맵</span>
-                                    <span class="text-[11px] text-gray-400 font-normal">직접 수혜 ➔ 이후 수혜 ➔ 후발 수혜</span>
-                                </div>
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    `;
-                    subStocks.forEach(sub => {
-                        const sm = sub.metrics || {};
-                        const sColor = (sm.change_pct || 0) >= 0 ? 'text-rose-400' : 'text-sky-400';
-                        const sBadge = getRoleBadgeClass(sub.role);
-                        const gap = sub.gap_room || 0;
-                        const gapTag = gap > 0 
-                            ? `<span class="text-[10px] text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded border border-emerald-500/30">키맞추기 룸 +${gap}%p</span>`
-                            : `<span class="text-[10px] text-rose-400 bg-rose-500/10 px-1 py-0.5 rounded">선행 급등</span>`;
-
-                        html += `
-                            <div class="bg-[#111c33] p-2.5 rounded border border-gray-800 flex items-center justify-between">
-                                <div>
-                                    <div class="flex items-center gap-1.5">
-                                        <span class="font-bold text-white text-xs">${sub.name}</span>
-                                        <span class="${sBadge} text-[10px] py-0.5 px-1.5">${sub.role}</span>
+                            <td colspan="14" class="p-5">
+                                <div class="flex items-center justify-between mb-3 pb-2 border-b border-amber-500/30">
+                                    <div class="text-xs font-bold text-amber-400 flex items-center gap-2">
+                                        <span>👑 [${item.name}] 대장주 연계 밸류체인 머니 플로우 맵</span>
                                     </div>
-                                    <div class="mt-1">${gapTag}</div>
+                                    <div class="text-[11px] text-cyan-300 font-medium">
+                                        자금 확산 순서: <span class="text-white font-bold">직접 수혜 ➔ 이후 수혜 ➔ 후발 수혜</span>
+                                    </div>
                                 </div>
-                                <div class="text-right">
-                                    <div class="text-xs font-semibold text-white">${(sm.current_price || 0).toLocaleString()}원</div>
-                                    <div class="text-[11px] ${sColor} font-bold">${formatPct(sm.change_pct)}</div>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    `;
+                    
+                    if (subStocks.length === 0) {
+                        html += `<div class="text-xs text-gray-400 py-2">연관 하위 수혜 종목 데이터 수집 중...</div>`;
+                    } else {
+                        subStocks.forEach(sub => {
+                            const sm = sub.metrics || {};
+                            const sColor = (sm.change_pct || 0) >= 0 ? 'text-rose-400' : 'text-sky-400';
+                            const sBadge = getRoleBadgeClass(sub.role);
+                            const gap = sub.gap_room || 0;
+                            const gapTag = gap > 0 
+                                ? `<span class="text-[10px] text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded border border-emerald-500/40 font-semibold">키맞추기 룸 +${gap}%p</span>`
+                                : `<span class="text-[10px] text-rose-300 bg-rose-500/20 px-1.5 py-0.5 rounded border border-rose-500/40">선행 급등</span>`;
+
+                            html += `
+                                <div class="bg-[#0b1320] p-3 rounded-lg border border-gray-700/80 shadow-md flex items-center justify-between">
+                                    <div>
+                                        <div class="flex items-center gap-2 mb-1">
+                                            <span class="font-bold text-white text-xs">${sub.name}</span>
+                                            <span class="${sBadge}">${sub.role}</span>
+                                        </div>
+                                        <div>${gapTag}</div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-xs font-bold text-white">${(sm.current_price || 0).toLocaleString()}원</div>
+                                        <div class="text-[11px] ${sColor} font-bold">${formatPct(sm.change_pct)}</div>
+                                    </div>
                                 </div>
-                            </div>
-                        `;
-                    });
-                    html += `</div></td></tr>`;
+                            `;
+                        });
+                    }
+
+                    html += `
+                                </div>
+                            </td>
+                        </tr>
+                    `;
                 }
             });
 
@@ -606,7 +624,7 @@
                     document.getElementById('conn-kis').innerText = data.status.kis || 'KIS ON';
                     document.getElementById('conn-dart').innerText = data.status.dart || 'DART ON';
                     document.getElementById('conn-krx').innerText = data.status.krx || 'KRX ON';
-                    document.getElementById('conn-gemini').innerText = data.status.gemini || 'Gemini ON';
+                    document.getElementById('conn-gemini').innerText = data.status.gemini || 'Gemini OFF';
                 }
             } catch (err) {
                 console.error("데이터 로드 실패:", err);
@@ -629,7 +647,6 @@
             document.getElementById('modal-prob-bar').style.width = `${prob}%`;
             document.getElementById('modal-ai-briefing').innerText = item.ai_briefing || `${item.name} 분석 보고서입니다.`;
 
-            // 6개 시계열 수익률 그리드 (5일, 10일, 30일, 3개월, 6개월, 1년)
             const r = item.metrics?.returns || {};
             const tech = item.technical || {};
             document.getElementById('modal-returns-grid').innerHTML = `
