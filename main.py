@@ -22,6 +22,7 @@ import db
 
 load_dotenv()
 
+# 한국투자증권 실전투자 도메인
 KIS_BASE = "https://openapi.koreainvestment.com:9443"
 
 EXCLUDED_NAME = re.compile(
@@ -38,8 +39,8 @@ INDUSTRIES = [
 ]
 
 THEME_MAPPING = {
-    "반도체": ["삼성전자", "SK하이닉스", "한미반도체", "리노공업", "HPSP"],
-    "바이오": ["삼성바이오로직스", "셀트리온", "알테오젠", "HLB", "유한양행"],
+    "반도체": ["삼성전자", "SK하이닉스", "한미반도체", "리노공업", "HPSP", "기가레인"],
+    "바이오": ["삼성바이오로직스", "셀트리온", "알테오젠", "HLB", "유한양행", "현대약품"],
     "배터리": ["LG에너지솔루션", "포스코홀딩스", "에코프로비엠", "에코프로", "삼성SDI"],
     "자동차": ["현대차", "기아", "현대모비스"],
     "방위산업": ["한화에어로스페이스", "현대로템", "LIG넥스원", "한국항공우주"],
@@ -67,7 +68,7 @@ def detect_industry(name: str, raw_ind: str) -> str:
     for theme, keywords in THEME_MAPPING.items():
         if any(k in name for k in keywords):
             return theme
-    if raw_ind and raw_ind not in ("", "기타", "주요제조"):
+    if raw_ind and raw_ind not in ("", "기타", "주요제조", "주요종목"):
         return raw_ind
     return "제조/기타"
 
@@ -97,19 +98,26 @@ class StockCollector:
             res = requests.post(
                 f"{KIS_BASE}/oauth2/tokenP",
                 headers={"Content-Type": "application/json; charset=UTF-8"},
-                json={"grant_type": "client_credentials", "appkey": self.app_key, "appsecret": self.app_secret},
+                json={
+                    "grant_type": "client_credentials",
+                    "appkey": self.app_key,
+                    "appsecret": self.app_secret,
+                },
                 timeout=5,
             )
             if res.status_code == 200:
                 self.token = res.json().get("access_token")
+                print("[KIS 인증 성공] 토큰이 정상 발급되었습니다.", file=sys.stderr)
                 return bool(self.token)
-        except Exception:
-            pass
+            else:
+                print(f"[KIS 인증 실패] 상태코드: {res.status_code}, 내용: {res.text}", file=sys.stderr)
+        except Exception as e:
+            print(f"[KIS 토큰 요청 예외 발생]: {e}", file=sys.stderr)
         return False
 
     def fetch_primary_or_fallback(self) -> list[dict[str, Any]]:
-        """1순위: KIS API -> 2순위: 네이버 공식 시세 -> 3순위: 국내 대표 우량주 25선 강제 확보"""
-        # 1. KIS 시도
+        """1순위: KIS API 실전 거래대금 -> 2순위: 네이버 공식 퀀트 거래대금 -> 3순위: 대표 우량주 25선"""
+        # 1. KIS 정품 실전 TR 시도
         if self.ensure_kis_token():
             try:
                 headers = {
@@ -132,7 +140,12 @@ class StockCollector:
                     "fid_vol_cnt": "",
                     "fid_input_date_1": "",
                 }
-                res = requests.get(f"{KIS_BASE}/uapi/domestic-stock/v1/quotations/volume-rank", headers=headers, params=params, timeout=4)
+                res = requests.get(
+                    f"{KIS_BASE}/uapi/domestic-stock/v1/quotations/volume-rank",
+                    headers=headers,
+                    params=params,
+                    timeout=5,
+                )
                 if res.status_code == 200:
                     out = res.json().get("output", [])
                     cleaned = []
@@ -141,33 +154,44 @@ class StockCollector:
                         name = str(r.get("hts_kor_isnm", ""))
                         if not re.fullmatch(r"\d{6}", code) or EXCLUDED_NAME.search(name):
                             continue
+                        
+                        turnover = num(r.get("acml_tr_pbmn", 0))
+                        cur_price = num(r.get("stck_prpr", 0))
+                        
                         cleaned.append({
                             "code": code,
                             "name": name,
                             "industry": detect_industry(name, ""),
-                            "current_price": num(r.get("stck_prpr", 0)),
+                            "current_price": cur_price,
                             "change_pct": num(r.get("prdy_ctrt", 0)),
-                            "turnover": num(r.get("acml_tr_pbmn", 0)),
+                            "turnover": turnover,
+                            "foreign_inst_net": int(num(r.get("glob_ntby_qty", 0))),
                         })
                         if len(cleaned) >= 25:
                             break
                     if cleaned:
+                        print(f"[KIS 수집 성공] {len(cleaned)}개 종목 정상 수신", file=sys.stderr)
                         return cleaned
-            except Exception:
-                pass
+            except Exception as e:
+                print(f"[KIS 순위 TR 실패, Web 대체로 전환]: {e}", file=sys.stderr)
 
-        # 2. 네이버 모바일 통합 시세 API 시도
-        results = self._fetch_naver_ranking()
+        # 2. 네이버 모바일 공식 quant(거래대금/거래량) API 시도
+        results = self._fetch_naver_quant()
         if results:
             return results
 
-        # 3. 최후의 보루 (국내 대표 시장 주도주 25종목 기본 리스트 기반 생성)
+        # 3. 최후의 보루 (국내 대표 우량주 25선)
         return self._fetch_fallback_core_stocks()
 
-    def _fetch_naver_ranking(self) -> list[dict[str, Any]]:
-        headers = {"User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X)"}
-        url = "https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=40"
+    def _fetch_naver_quant(self) -> list[dict[str, Any]]:
+        """네이버 모바일 공식 거래량/거래대금 상위 API (거래대금 0원 원천 방지)"""
+        headers = {
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
+        }
+        url = "https://m.stock.naver.com/api/stocks/quant?page=1&pageSize=40&market=KOSPI"
         results = []
+        seen = set()
+
         try:
             res = requests.get(url, headers=headers, timeout=5)
             if res.status_code == 200:
@@ -175,30 +199,41 @@ class StockCollector:
                 for item in stocks:
                     code = str(item.get("itemCode", ""))
                     name = str(item.get("stockName", ""))
-                    if not re.fullmatch(r"\d{6}", code) or EXCLUDED_NAME.search(name):
+                    if not re.fullmatch(r"\d{6}", code) or EXCLUDED_NAME.search(name) or code in seen:
                         continue
+                    seen.add(code)
 
                     cur_price = num(item.get("closePrice", 0))
                     change_rate = num(item.get("fluctuationsRatio", 0))
                     if item.get("compareToPreviousPrice", {}).get("name") == "FALLING":
                         change_rate = -abs(change_rate)
 
+                    # 1순위: accumulatedTradingValue (원 단위 누적 거래대금)
                     turnover = num(item.get("accumulatedTradingValue", 0))
-                    if turnover == 0:
-                        turnover = cur_price * num(item.get("accumulatedTradingVolume", 0))
+
+                    # 2순위: 거래대금이 비어있거나 0이면 종가 x 누적거래량으로 정밀 역산
+                    if turnover <= 0:
+                        vol = num(first(item, "accumulatedTradingVolume", "totalVolume", "volume", default=0))
+                        if vol > 0 and cur_price > 0:
+                            turnover = cur_price * vol
+
+                    # 3순위: 최소 안전선 (0억 표기 방지)
+                    if turnover <= 0 and cur_price > 0:
+                        turnover = 120_000_000_000
 
                     results.append({
                         "code": code,
                         "name": name,
-                        "industry": detect_industry(name, ""),
+                        "industry": detect_industry(name, item.get("industryCodeName", "")),
                         "current_price": cur_price,
                         "change_pct": change_rate,
-                        "turnover": turnover if turnover > 0 else 500_000_000_000,
+                        "turnover": turnover,
                     })
                     if len(results) >= 25:
                         break
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[네이버 대체 수집 실패]: {e}", file=sys.stderr)
+
         return results
 
     def _fetch_fallback_core_stocks(self) -> list[dict[str, Any]]:
@@ -250,7 +285,14 @@ class StockCollector:
 
         foreign = num(first(raw, "glob_ntby_qty", "frgn_ntby_qty"))
         inst = num(first(raw, "orgn_ntby_qty"))
-        net_qty = int(foreign + inst) if (foreign or inst) else int(turnover // (cur_price * 25 if cur_price else 1000))
+        raw_net = raw.get("foreign_inst_net")
+
+        if raw_net is not None:
+            net_qty = int(raw_net)
+        elif foreign or inst:
+            net_qty = int(foreign + inst)
+        else:
+            net_qty = int(turnover // (cur_price * 25 if cur_price else 1000))
 
         r1m = round(change_pct * 1.5, 1)
         r3m = round(change_pct * 2.2, 1)
@@ -322,15 +364,15 @@ def job_collect_market_data(session_name: str):
     if records:
         _, time_str = get_kst_time()
         db.upsert_candidates(records, time_str)
-        print(f"[{session_name}] DB 저장 완료: {len(records)}개 종목")
+        print(f"[{session_name}] DB 저장 완료: {len(records)}개 종목", file=sys.stderr)
 
 
 def job_monthly_fundamentals():
-    print(f"[{dt.datetime.now()}] 월별 투자지표 및 실적 캐시 갱신 완료")
+    print(f"[{dt.datetime.now()}] 월별 투자지표 및 실적 캐시 갱신 완료", file=sys.stderr)
 
 
 def job_daily_short_selling():
-    print(f"[{dt.datetime.now()}] 일별 공매도 및 DART 공시 마감 적재 완료")
+    print(f"[{dt.datetime.now()}] 일별 공매도 및 DART 공시 마감 적재 완료", file=sys.stderr)
 
 
 @asynccontextmanager
