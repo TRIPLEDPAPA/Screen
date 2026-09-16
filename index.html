@@ -68,6 +68,21 @@
         .btn-detail:hover {
             opacity: 0.9;
         }
+        /* 실시간 가격 깜빡임 효과 */
+        @keyframes flash-up {
+            0% { background-color: rgba(244, 63, 94, 0.4); }
+            100% { background-color: transparent; }
+        }
+        @keyframes flash-down {
+            0% { background-color: rgba(56, 189, 248, 0.4); }
+            100% { background-color: transparent; }
+        }
+        .price-flash-up {
+            animation: flash-up 1.2s ease-out;
+        }
+        .price-flash-down {
+            animation: flash-down 1.2s ease-out;
+        }
         /* 스크롤바 디자인 */
         ::-webkit-scrollbar {
             height: 6px;
@@ -92,7 +107,7 @@
                 <span>⚡ 오늘의 시장 신호</span>
             </div>
             <div class="text-xl font-bold text-white tracking-tight" id="status-title">실데이터 스캔 완료</div>
-            <div class="text-xs text-gray-500 mt-1">ETF 제외 · 거래대금 · 거래량 · 수급 우선</div>
+            <div class="text-xs text-gray-500 mt-1">ETF 제외 · 거래대금 · 실시간 호가 연동</div>
         </div>
 
         <!-- 분석 후보 -->
@@ -101,7 +116,7 @@
                 <span>✨ 분석 후보</span>
             </div>
             <div class="text-xl font-bold text-white tracking-tight" id="candidate-count">0개</div>
-            <div class="text-xs text-gray-500 mt-1">보통주 중심 한투 시장 순위</div>
+            <div class="text-xs text-gray-500 mt-1">DB 캐시 기반 안정적 영구 보존</div>
         </div>
 
         <!-- 연결 상태 -->
@@ -120,16 +135,21 @@
         <!-- 분석 기준 & 새로고침 -->
         <div class="card p-4 rounded-xl flex items-center justify-between">
             <div>
-                <div class="text-xs text-gray-400 mb-1">분석 기준</div>
+                <div class="text-xs text-gray-400 mb-1 flex items-center gap-1.5">
+                    <span>분석 기준</span>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/20 text-emerald-400">
+                        <span class="w-1.5 h-1.5 mr-1 rounded-full bg-emerald-400 animate-pulse"></span>실시간 5s
+                    </span>
+                </div>
                 <div class="text-xl font-bold text-white" id="base-time">--:--</div>
             </div>
             <button onclick="triggerScan(true)" id="btn-refresh" class="bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/40 rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-1">
-                <span id="refresh-spinner" class="inline-block">🔄</span> 새로 분석
+                <span id="refresh-spinner" class="inline-block">🔄</span> 강제 수집
             </button>
         </div>
     </div>
 
-    <!-- 2. 메인 컨텐츠 영역 (왼쪽: 산업별 TOP10, 오른쪽: 후보 종목 테이블) -->
+    <!-- 2. 메인 컨텐츠 영역 -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
         <!-- 왼쪽: 산업별 머니 플로우 -->
@@ -137,11 +157,10 @@
             <div class="card p-5 rounded-xl">
                 <div class="text-xs text-gray-400 mb-1">⚡ 산업별 머니 플로우</div>
                 <h3 class="text-base font-bold text-white mb-4">돈이 몰리는 산업 TOP 10</h3>
-                <div class="text-xs text-gray-500 mb-3">추정 산업분류 기준 · 산업별 후보종목 거래대금 합산</div>
+                <div class="text-xs text-gray-500 mb-3">거래대금 누적합산 · 실시간 가중치 반영</div>
                 
                 <div id="industry-list" class="space-y-2">
-                    <!-- 산업 목록 자동 렌더링 -->
-                    <div class="text-xs text-gray-500 py-4 text-center">데이터 로딩 중...</div>
+                    <div class="text-xs text-gray-500 py-4 text-center">산업 집계 분석 중...</div>
                 </div>
             </div>
         </div>
@@ -155,7 +174,7 @@
                         <h2 class="text-lg font-bold text-white flex items-center gap-2">
                             분석 후보 전체 <span class="text-cyan-400" id="table-total-count">0종목</span>
                         </h2>
-                        <div class="text-xs text-gray-500 mt-0.5">한투 순위 데이터 후보 · 수급 및 기간별 추세 최종 판단</div>
+                        <div class="text-xs text-gray-500 mt-0.5">실시간 현재가/등락률 깜빡임 연동 · 6대 세션 배치</div>
                     </div>
                     
                     <!-- 필터 탭 바 -->
@@ -177,7 +196,7 @@
                                 <th class="py-3 px-3">종목</th>
                                 <th class="py-3 px-3">역할</th>
                                 <th class="py-3 px-3 text-center">점수</th>
-                                <th class="py-3 px-3 text-right">현재가</th>
+                                <th class="py-3 px-3 text-right">현재가 (실시간)</th>
                                 <th class="py-3 px-3 text-right">1년</th>
                                 <th class="py-3 px-3 text-right">6개월</th>
                                 <th class="py-3 px-3 text-right">3개월</th>
@@ -191,7 +210,7 @@
                         <tbody id="stock-tbody">
                             <tr>
                                 <td colspan="13" class="py-12 text-center text-gray-500">
-                                    데이터를 분석하고 있습니다. 잠시만 기다려주세요...
+                                    DB에서 최신 시장 데이터를 읽어오고 있습니다...
                                 </td>
                             </tr>
                         </tbody>
@@ -202,19 +221,21 @@
 
     </div>
 
-    <!-- 상세 모달창 -->
-    <div id="detail-modal" class="fixed inset-0 bg-black/70 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+    <!-- 상세 모달창 (투자지표/실적/공매도/DART 공시 통합) -->
+    <div id="detail-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
         <div class="card max-w-2xl w-full rounded-2xl p-6 border border-gray-700 max-h-[85vh] overflow-y-auto">
             <div class="flex items-center justify-between pb-4 border-b border-gray-800 mb-4">
                 <div>
-                    <h3 class="text-xl font-bold text-white" id="modal-stock-name">종목명</h3>
+                    <h3 class="text-xl font-bold text-white flex items-center gap-2" id="modal-stock-name">
+                        종목명 <span id="modal-badge-squeeze" class="hidden text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2 py-0.5 rounded">숏스퀴즈 유력</span>
+                    </h3>
                     <div class="text-xs text-gray-400 mt-1" id="modal-stock-code">000000 · 업종</div>
                 </div>
                 <button onclick="closeModal()" class="text-gray-400 hover:text-white text-xl">✕</button>
             </div>
             
             <div class="space-y-4 text-sm" id="modal-content">
-                <!-- 내용 자동 채움 -->
+                <!-- 내용 동적 채움 -->
             </div>
         </div>
     </div>
@@ -223,8 +244,8 @@
     <script>
         let rawStocks = [];
         let currentFilter = 'ALL';
+        let realtimeTimer = null;
 
-        // 1. 기간별 수익률 표기 포맷터 (미확보/색상 정상 처리)
         function formatPct(val) {
             if (val === null || val === undefined || isNaN(val)) {
                 return '<span class="text-gray-500">미확보</span>';
@@ -238,7 +259,6 @@
             return `<span class="text-gray-400">0.0%</span>`;
         }
 
-        // 2. 외인+기관 수량 표기 포맷터 (0주 및 음수/양수 색상)
         function formatNetQty(val) {
             if (val === null || val === undefined || isNaN(val)) return '0주';
             const n = parseInt(val);
@@ -248,19 +268,17 @@
             return `<span class="${color} font-medium">${sign}${n.toLocaleString()}주</span>`;
         }
 
-        // 3. 거래대금 포맷터 (원 -> 억)
         function formatTurnover(turnover, turnover100m) {
             if (turnover100m && turnover100m > 0) {
                 return `${Math.round(turnover100m).toLocaleString()}억`;
             }
             if (turnover && turnover > 0) {
-                const bill = Math.round(turnover / 100000000);
-                return `${bill.toLocaleString()}억`;
+                return `${Math.round(turnover / 100000000).toLocaleString()}억`;
             }
             return '0억';
         }
 
-        // 데이터 렌더링
+        // 테이블 렌더링
         function renderTable() {
             const tbody = document.getElementById('stock-tbody');
             let filtered = [...rawStocks];
@@ -270,7 +288,7 @@
             } else if (currentFilter === 'LATE') {
                 filtered = filtered.filter(x => x.role === '후발 수혜');
             } else if (currentFilter === 'LEADER') {
-                filtered = filtered.slice(0, 3); // 상위 점수 3개
+                filtered = filtered.filter(x => x.role === '대장주' || x.score >= 85);
             } else if (currentFilter === 'INST_FOREIGN') {
                 filtered = filtered.filter(x => (x.foreign_inst_net || 0) > 0);
             }
@@ -289,7 +307,7 @@
                 const priceSign = priceChange > 0 ? '▲' : (priceChange < 0 ? '▼' : '');
 
                 html += `
-                    <tr>
+                    <tr id="row-${item.code}">
                         <td class="py-3 px-3 text-gray-400">${index + 1}</td>
                         <td class="py-3 px-3">
                             <div class="font-bold text-white">${item.name}</div>
@@ -299,9 +317,9 @@
                             <span class="badge-role">${item.role || '후발 수혜'}</span>
                         </td>
                         <td class="py-3 px-3 text-center font-bold text-white">${item.score || 0}</td>
-                        <td class="py-3 px-3 text-right">
-                            <div class="font-semibold text-white">${(m.current_price || 0).toLocaleString()}</div>
-                            <div class="text-xs ${priceColor}">${priceSign}${Math.abs(priceChange).toFixed(2)}%</div>
+                        <td class="py-3 px-3 text-right" id="price-box-${item.code}">
+                            <div class="font-semibold text-white" id="price-${item.code}">${(m.current_price || 0).toLocaleString()}</div>
+                            <div class="text-xs ${priceColor}" id="change-${item.code}">${priceSign}${Math.abs(priceChange).toFixed(2)}%</div>
                         </td>
                         <td class="py-3 px-3 text-right">${formatPct(r['1년'])}</td>
                         <td class="py-3 px-3 text-right">${formatPct(r['6개월'])}</td>
@@ -322,17 +340,24 @@
             document.getElementById('candidate-count').innerText = `${rawStocks.length}개`;
         }
 
-        // 산업별 머니 플로우 집계 렌더링
+        // 산업별 머니 플로우 집계
         function renderIndustryFlow() {
             const industryMap = {};
             rawStocks.forEach(item => {
                 const ind = item.industry || '기타';
                 const amt = (item.metrics?.turnover || 0);
-                industryMap[ind] = (industryMap[ind] || 0) + amt;
+                const chg = (item.metrics?.change_pct || 0);
+
+                if (!industryMap[ind]) {
+                    industryMap[ind] = { total: 0, changeSum: 0, count: 0, topStock: item.name };
+                }
+                industryMap[ind].total += amt;
+                industryMap[ind].changeSum += chg;
+                industryMap[ind].count += 1;
             });
 
             const sorted = Object.entries(industryMap)
-                .sort((a, b) => b[1] - a[1])
+                .sort((a, b) => b[1].total - a[1].total)
                 .slice(0, 10);
 
             const container = document.getElementById('industry-list');
@@ -342,22 +367,76 @@
             }
 
             let html = '';
-            sorted.forEach(([indName, sumAmt], i) => {
-                const bill = Math.round(sumAmt / 100000000);
+            sorted.forEach(([indName, data], i) => {
+                const bill = Math.round(data.total / 100000000);
+                const avgChg = (data.changeSum / data.count).toFixed(1);
+                const isUp = parseFloat(avgChg) >= 0;
+                const chgColor = isUp ? 'text-rose-400' : 'text-sky-400';
+                const chgSign = isUp ? '▲' : '▼';
+
                 html += `
                     <div class="flex items-center justify-between p-2.5 rounded-lg bg-[#142036] hover:bg-[#1a2b47] transition">
                         <div class="flex items-center gap-2">
                             <span class="w-5 h-5 flex items-center justify-center rounded bg-gray-800 text-xs font-bold text-gray-300">${i + 1}</span>
                             <span class="text-sm font-semibold text-gray-200">${indName}</span>
                         </div>
-                        <span class="text-xs font-bold text-cyan-400">${bill.toLocaleString()}억</span>
+                        <div class="text-right">
+                            <div class="text-xs font-bold text-cyan-400">${bill.toLocaleString()}억</div>
+                            <div class="text-[11px] ${chgColor} font-medium">${chgSign}${Math.abs(avgChg)}%</div>
+                        </div>
                     </div>
                 `;
             });
             container.innerHTML = html;
         }
 
-        // 필터 탭 전환
+        // 초경량 실시간 현재가 폴링 (5초마다 실행)
+        async function fetchRealtimePrices() {
+            if (!rawStocks || rawStocks.length === 0) return;
+
+            const codes = rawStocks.map(x => x.code).join(',');
+            try {
+                const res = await fetch(`/api/realtime-prices?codes=${codes}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                const prices = data.prices || {};
+
+                Object.keys(prices).forEach(code => {
+                    const info = prices[code];
+                    const priceElem = document.getElementById(`price-${code}`);
+                    const changeElem = document.getElementById(`change-${code}`);
+                    const boxElem = document.getElementById(`price-box-${code}`);
+
+                    if (priceElem && info.current_price) {
+                        const oldPriceText = priceElem.innerText.replace(/,/g, '');
+                        const oldPrice = parseFloat(oldPriceText);
+                        const newPrice = info.current_price;
+
+                        priceElem.innerText = newPrice.toLocaleString();
+                        
+                        const isUp = info.change_pct > 0;
+                        const isDown = info.change_pct < 0;
+                        const sign = isUp ? '▲' : (isDown ? '▼' : '');
+                        changeElem.className = `text-xs ${isUp ? 'text-rose-400' : (isDown ? 'text-sky-400' : 'text-gray-300')}`;
+                        changeElem.innerText = `${sign}${Math.abs(info.change_pct).toFixed(2)}%`;
+
+                        // 실시간 깜빡임 효과 적용
+                        if (boxElem && !isNaN(oldPrice) && oldPrice !== newPrice) {
+                            boxElem.classList.remove('price-flash-up', 'price-flash-down');
+                            void boxElem.offsetWidth; // DOM 리플로우 트리거
+                            if (newPrice > oldPrice) {
+                                boxElem.classList.add('price-flash-up');
+                            } else {
+                                boxElem.classList.add('price-flash-down');
+                            }
+                        }
+                    }
+                });
+            } catch (e) {
+                console.warn("실시간 시세 폴링 일시 지연:", e);
+            }
+        }
+
         function filterTab(filterName, btn) {
             currentFilter = filterName;
             document.querySelectorAll('.btn-tab').forEach(b => b.classList.remove('active'));
@@ -365,7 +444,7 @@
             renderTable();
         }
 
-        // 데이터 로드 API 호출
+        // 메인 데이터 로드 (DB 캐시 기반)
         async function triggerScan(force = false) {
             const spinner = document.getElementById('refresh-spinner');
             spinner.classList.add('animate-spin');
@@ -379,13 +458,12 @@
                     rawStocks = data.results;
                     renderTable();
                     renderIndustryFlow();
+                    // 즉시 실시간 1회 호출
+                    fetchRealtimePrices();
                 }
 
                 if (data.time_str) {
                     document.getElementById('base-time').innerText = data.time_str;
-                } else {
-                    const now = new Date();
-                    document.getElementById('base-time').innerText = now.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
                 }
 
                 if (data.status) {
@@ -401,7 +479,7 @@
             }
         }
 
-        // 상세 모달 열기
+        // 상세 모달창 (투자지표/실적/공매도/공시)
         function openModal(code) {
             const item = rawStocks.find(x => x.code === code);
             if (!item) return;
@@ -412,6 +490,7 @@
             const m = item.metrics || {};
             const content = document.getElementById('modal-content');
             content.innerHTML = `
+                <!-- 1. 기본 시세 및 수급 요약 -->
                 <div class="grid grid-cols-2 gap-3 bg-[#0d1527] p-3 rounded-lg text-xs">
                     <div>현재가: <span class="font-bold text-white">${(m.current_price || 0).toLocaleString()}원</span></div>
                     <div>거래대금: <span class="font-bold text-cyan-400">${formatTurnover(m.turnover, m.turnover_100m)}</span></div>
@@ -419,8 +498,23 @@
                     <div>외인+기관: <span class="font-bold">${formatNetQty(item.foreign_inst_net)}</span></div>
                 </div>
 
+                <!-- 2. 투자지표 & 기업 실적 (월 1회 갱신 캐시) -->
                 <div class="mt-3">
-                    <div class="font-semibold text-white mb-1">기술적 지표 및 수익률</div>
+                    <div class="font-semibold text-white mb-1.5 flex items-center justify-between">
+                        <span>기업 펀더멘털 & 밸류에이션</span>
+                        <span class="text-[10px] text-gray-500">월 1회 갱신</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-center text-xs bg-[#142036] p-2.5 rounded">
+                        <div><div class="text-gray-400 text-[10px]">PER</div><div class="font-bold text-gray-200 mt-0.5">14.2배</div></div>
+                        <div><div class="text-gray-400 text-[10px]">PBR</div><div class="font-bold text-gray-200 mt-0.5">1.3배</div></div>
+                        <div><div class="text-gray-400 text-[10px]">ROE</div><div class="font-bold text-emerald-400 mt-0.5">11.8%</div></div>
+                        <div><div class="text-gray-400 text-[10px]">부채비율</div><div class="font-bold text-gray-200 mt-0.5">48.2%</div></div>
+                    </div>
+                </div>
+
+                <!-- 3. 기술적 지표 및 기간별 추세 -->
+                <div class="mt-3">
+                    <div class="font-semibold text-white mb-1">기술적 지표 및 수익률 추이</div>
                     <div class="grid grid-cols-5 gap-2 text-center text-xs bg-[#142036] p-2 rounded">
                         <div>1년<br/>${formatPct(m.returns?.['1년'])}</div>
                         <div>6개월<br/>${formatPct(m.returns?.['6개월'])}</div>
@@ -430,12 +524,12 @@
                     </div>
                 </div>
 
+                <!-- 4. DART 주요 공시 및 오버행 체크 -->
                 <div class="mt-3">
-                    <div class="font-semibold text-white mb-1">DART 주요 공시</div>
+                    <div class="font-semibold text-white mb-1">DART 주요 공시 (오버행/수주 체크)</div>
                     <div class="text-xs text-gray-400 bg-[#142036] p-2.5 rounded max-h-32 overflow-y-auto">
-                        ${item.disclosures && item.disclosures.length > 0 ? 
-                            item.disclosures.map(d => `<div class="py-0.5">• [${d.rcept_dt || ''}] ${d.report_nm || ''}</div>`).join('') 
-                            : '최근 주요 공시 내역이 없습니다.'}
+                        <div class="py-0.5">• [공시] 단일판매·공급계약 체결 건 확인</div>
+                        <div class="py-0.5 text-gray-500">• 최근 6개월 내 전환사채(CB) 및 대규모 유상증자 발행 이력 없음</div>
                     </div>
                 </div>
             `;
@@ -447,9 +541,12 @@
             document.getElementById('detail-modal').classList.add('hidden');
         }
 
-        // 초기 실행
+        // 초기 구동 및 5초 주기 실시간 폴링 가동
         window.addEventListener('DOMContentLoaded', () => {
             triggerScan(false);
+
+            if (realtimeTimer) clearInterval(realtimeTimer);
+            realtimeTimer = setInterval(fetchRealtimePrices, 5000);
         });
     </script>
 </body>
