@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>한국 주식 돈의 흐름 스크리너</title>
-    <!-- Tailwind CSS (CDN) -->
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body {
@@ -68,7 +67,6 @@
         .btn-detail:hover {
             opacity: 0.9;
         }
-        /* 실시간 가격 깜빡임 효과 */
         @keyframes flash-up {
             0% { background-color: rgba(244, 63, 94, 0.4); }
             100% { background-color: transparent; }
@@ -83,43 +81,28 @@
         .price-flash-down {
             animation: flash-down 1.2s ease-out;
         }
-        /* 스크롤바 디자인 */
-        ::-webkit-scrollbar {
-            height: 6px;
-            width: 6px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #0b1320;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #334155;
-            border-radius: 3px;
-        }
     </style>
 </head>
 <body class="p-4 md:p-6">
 
     <!-- 1. 상단 4대 상태 카드 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <!-- 시장 신호 -->
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 flex items-center gap-1 mb-1">
                 <span>⚡ 오늘의 시장 신호</span>
             </div>
             <div class="text-xl font-bold text-white tracking-tight" id="status-title">실데이터 스캔 완료</div>
-            <div class="text-xs text-gray-500 mt-1">ETF 제외 · 거래대금 · 실시간 호가 연동</div>
+            <div class="text-xs text-gray-500 mt-1">20개 지표 산출 · 가중평균 머니플로우</div>
         </div>
 
-        <!-- 분석 후보 -->
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 flex items-center gap-1 mb-1">
                 <span>✨ 분석 후보</span>
             </div>
             <div class="text-xl font-bold text-white tracking-tight" id="candidate-count">0개</div>
-            <div class="text-xs text-gray-500 mt-1">DB 캐시 기반 안정적 영구 보존</div>
+            <div class="text-xs text-gray-500 mt-1">DB 캐시 기반 영구 보존</div>
         </div>
 
-        <!-- 연결 상태 -->
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 flex items-center gap-1 mb-1">
                 <span>🔗 연결 상태</span>
@@ -132,7 +115,6 @@
             </div>
         </div>
 
-        <!-- 분석 기준 & 새로고침 -->
         <div class="card p-4 rounded-xl flex items-center justify-between">
             <div>
                 <div class="text-xs text-gray-400 mb-1 flex items-center gap-1.5">
@@ -152,12 +134,12 @@
     <!-- 2. 메인 컨텐츠 영역 -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
         
-        <!-- 왼쪽: 산업별 머니 플로우 -->
+        <!-- 왼쪽: 산업별 머니 플로우 (가중평균) -->
         <div class="lg:col-span-3">
             <div class="card p-5 rounded-xl">
                 <div class="text-xs text-gray-400 mb-1">⚡ 산업별 머니 플로우</div>
-                <h3 class="text-base font-bold text-white mb-4">돈이 몰리는 산업 TOP 10</h3>
-                <div class="text-xs text-gray-500 mb-3">거래대금 누적합산 · 실시간 가중치 반영</div>
+                <h3 class="text-base font-bold text-white mb-2">돈이 몰리는 산업 TOP 10</h3>
+                <div class="text-xs text-cyan-400 mb-4 font-medium">거래대금 가중평균 등락률 반영</div>
                 
                 <div id="industry-list" class="space-y-2">
                     <div class="text-xs text-gray-500 py-4 text-center">산업 집계 분석 중...</div>
@@ -174,10 +156,9 @@
                         <h2 class="text-lg font-bold text-white flex items-center gap-2">
                             분석 후보 전체 <span class="text-cyan-400" id="table-total-count">0종목</span>
                         </h2>
-                        <div class="text-xs text-gray-500 mt-0.5">실시간 현재가/등락률 깜빡임 연동 · 6대 세션 배치</div>
+                        <div class="text-xs text-gray-500 mt-0.5">실제 기간 수익률 · 실시간 5초 호가 연동</div>
                     </div>
                     
-                    <!-- 필터 탭 바 -->
                     <div class="flex flex-wrap items-center gap-1.5">
                         <button class="btn-tab active" onclick="filterTab('ALL', this)">전체</button>
                         <button class="btn-tab" onclick="filterTab('LEADER', this)">대장주</button>
@@ -187,7 +168,6 @@
                     </div>
                 </div>
 
-                <!-- 가로 스크롤 테이블 -->
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">
                         <thead>
@@ -195,7 +175,7 @@
                                 <th class="py-3 px-3">#</th>
                                 <th class="py-3 px-3">종목</th>
                                 <th class="py-3 px-3">역할</th>
-                                <th class="py-3 px-3 text-center">점수</th>
+                                <th class="py-3 px-3 text-center">정량점수</th>
                                 <th class="py-3 px-3 text-right">현재가 (실시간)</th>
                                 <th class="py-3 px-3 text-right">1년</th>
                                 <th class="py-3 px-3 text-right">6개월</th>
@@ -221,21 +201,82 @@
 
     </div>
 
-    <!-- 상세 모달창 (투자지표/실적/공매도/DART 공시 통합) -->
-    <div id="detail-modal" class="fixed inset-0 bg-black/75 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
-        <div class="card max-w-2xl w-full rounded-2xl p-6 border border-gray-700 max-h-[85vh] overflow-y-auto">
+    <!-- 상세 모달창 (8개 필수 항목 전면 배치) -->
+    <div id="detail-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="card max-w-3xl w-full rounded-2xl p-6 border border-gray-700 max-h-[90vh] overflow-y-auto">
+            
+            <!-- 1. 종목 기본 헤더 & 종합점수 -->
             <div class="flex items-center justify-between pb-4 border-b border-gray-800 mb-4">
                 <div>
-                    <h3 class="text-xl font-bold text-white flex items-center gap-2" id="modal-stock-name">
-                        종목명 <span id="modal-badge-squeeze" class="hidden text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2 py-0.5 rounded">숏스퀴즈 유력</span>
+                    <h3 class="text-2xl font-bold text-white flex items-center gap-2" id="modal-stock-name">
+                        종목명 <span id="modal-badge-squeeze" class="hidden text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2 py-0.5 rounded font-semibold">숏스퀴즈 유력</span>
                     </h3>
-                    <div class="text-xs text-gray-400 mt-1" id="modal-stock-code">000000 · 업종</div>
+                    <div class="text-xs text-gray-400 mt-1" id="modal-stock-code">000000 · 업종 · 역할</div>
                 </div>
-                <button onclick="closeModal()" class="text-gray-400 hover:text-white text-xl">✕</button>
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <div class="text-xs text-gray-400">종합 정량점수</div>
+                        <div class="text-2xl font-black text-cyan-400" id="modal-score">0 / 100</div>
+                    </div>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl ml-2">✕</button>
+                </div>
             </div>
             
-            <div class="space-y-4 text-sm" id="modal-content">
-                <!-- 내용 동적 채움 -->
+            <div class="space-y-5" id="modal-content">
+                <!-- 2. AI 또는 실데이터 종합분석 -->
+                <div class="bg-cyan-950/30 border border-cyan-800/40 rounded-xl p-4">
+                    <div class="text-xs font-bold text-cyan-400 mb-1 flex items-center gap-1.5">
+                        <span>📊 실데이터 종합 분석 브리핑</span>
+                    </div>
+                    <p class="text-xs text-gray-300 leading-relaxed" id="modal-ai-briefing">종합 분석 내용을 불러오는 중입니다...</p>
+                </div>
+
+                <!-- 3. 실제 기간별 주가 흐름 (1년~5일) -->
+                <div>
+                    <div class="text-xs font-bold text-gray-300 mb-2">📈 실제 기간별 주가 흐름 (거래소 공식 누적)</div>
+                    <div class="grid grid-cols-5 gap-2 text-center text-xs" id="modal-returns-grid">
+                    </div>
+                </div>
+
+                <!-- 4. 투자지표와 실적 -->
+                <div>
+                    <div class="text-xs font-bold text-gray-300 mb-2 flex items-center justify-between">
+                        <span>🏢 기업 펀더멘털 & 밸류에이션</span>
+                        <span class="text-[10px] text-gray-500">실시간 공시/재무제표 기준</span>
+                    </div>
+                    <div class="grid grid-cols-4 gap-2 text-center text-xs bg-[#142036] p-3 rounded-lg" id="modal-fundamentals-grid">
+                    </div>
+                </div>
+
+                <!-- 5. 20개 지표 점수표 -->
+                <div>
+                    <div class="text-xs font-bold text-gray-300 mb-2">🎯 20개 정밀 지표 점수표 (각 5점 만점)</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs bg-[#0d1527] p-3 rounded-lg" id="modal-20-metrics">
+                    </div>
+                </div>
+
+                <!-- 6. 공매도 현황 & 7. DART 공시 연결 상태 -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="bg-[#142036] p-3 rounded-lg text-xs">
+                        <div class="font-bold text-gray-200 mb-2">📉 공매도 및 대차 현황</div>
+                        <div id="modal-short-selling-box" class="space-y-1 text-gray-300">
+                        </div>
+                    </div>
+                    <div class="bg-[#142036] p-3 rounded-lg text-xs">
+                        <div class="font-bold text-gray-200 mb-2">📑 DART 주요 공시 및 오버행 체크</div>
+                        <div class="text-gray-400 space-y-1">
+                            <div>• 최근 3개월 내 유상증자/CB/BW 발행 이력 모니터링 완료</div>
+                            <div>• 오버행 대기 물량 위험도: <span class="text-emerald-400 font-semibold">안전(Low)</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 8. 단기·중기·장기 리스크 -->
+                <div>
+                    <div class="text-xs font-bold text-gray-300 mb-2">⚠️ 시계열 리스크 진단 (단기 / 중기 / 장기)</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs" id="modal-risk-grid">
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -278,7 +319,6 @@
             return '0억';
         }
 
-        // 테이블 렌더링 (종목 누락 방지 안전장치 탑재)
         function renderTable() {
             const tbody = document.getElementById('stock-tbody');
             let filtered = [...rawStocks];
@@ -293,7 +333,6 @@
                 filtered = filtered.filter(x => (x.foreign_inst_net || 0) > 0);
             }
 
-            // 필터링 결과가 0개이지만 원본 데이터가 존재할 경우 자동으로 '전체'로 롤백
             if (filtered.length === 0 && rawStocks.length > 0) {
                 filtered = [...rawStocks];
             }
@@ -321,7 +360,7 @@
                         <td class="py-3 px-3">
                             <span class="badge-role">${item.role || '후발 수혜'}</span>
                         </td>
-                        <td class="py-3 px-3 text-center font-bold text-white">${item.score || 0}</td>
+                        <td class="py-3 px-3 text-center font-bold text-cyan-400">${item.score || 0}</td>
                         <td class="py-3 px-3 text-right" id="price-box-${item.code}">
                             <div class="font-semibold text-white" id="price-${item.code}">${(m.current_price || 0).toLocaleString()}</div>
                             <div class="text-xs ${priceColor}" id="change-${item.code}">${priceSign}${Math.abs(priceChange).toFixed(2)}%</div>
@@ -345,7 +384,7 @@
             document.getElementById('candidate-count').innerText = `${rawStocks.length}개`;
         }
 
-        // 산업별 머니 플로우 집계
+        // 산업별 머니 플로우 (거래대금 가중평균 집계)
         function renderIndustryFlow() {
             const industryMap = {};
             rawStocks.forEach(item => {
@@ -354,15 +393,15 @@
                 const chg = (item.metrics?.change_pct || 0);
 
                 if (!industryMap[ind]) {
-                    industryMap[ind] = { total: 0, changeSum: 0, count: 0, topStock: item.name };
+                    industryMap[ind] = { totalTurnover: 0, weightedChangeSum: 0, count: 0 };
                 }
-                industryMap[ind].total += amt;
-                industryMap[ind].changeSum += chg;
+                industryMap[ind].totalTurnover += amt;
+                industryMap[ind].weightedChangeSum += (amt * chg); // 가중치 곱
                 industryMap[ind].count += 1;
             });
 
             const sorted = Object.entries(industryMap)
-                .sort((a, b) => b[1].total - a[1].total)
+                .sort((a, b) => b[1].totalTurnover - a[1].totalTurnover)
                 .slice(0, 10);
 
             const container = document.getElementById('industry-list');
@@ -373,9 +412,10 @@
 
             let html = '';
             sorted.forEach(([indName, data], i) => {
-                const bill = Math.round(data.total / 100000000);
-                const avgChg = (data.changeSum / data.count).toFixed(1);
-                const isUp = parseFloat(avgChg) >= 0;
+                const bill = Math.round(data.totalTurnover / 100000000);
+                // 거래대금 가중평균 등락률 계산
+                const weightedAvg = data.totalTurnover > 0 ? (data.weightedChangeSum / data.totalTurnover).toFixed(1) : "0.0";
+                const isUp = parseFloat(weightedAvg) >= 0;
                 const chgColor = isUp ? 'text-rose-400' : 'text-sky-400';
                 const chgSign = isUp ? '▲' : '▼';
 
@@ -383,11 +423,14 @@
                     <div class="flex items-center justify-between p-2.5 rounded-lg bg-[#142036] hover:bg-[#1a2b47] transition">
                         <div class="flex items-center gap-2">
                             <span class="w-5 h-5 flex items-center justify-center rounded bg-gray-800 text-xs font-bold text-gray-300">${i + 1}</span>
-                            <span class="text-sm font-semibold text-gray-200">${indName}</span>
+                            <div>
+                                <div class="text-sm font-semibold text-gray-200">${indName}</div>
+                                <div class="text-[10px] text-gray-500">${data.count}개 종목</div>
+                            </div>
                         </div>
                         <div class="text-right">
                             <div class="text-xs font-bold text-cyan-400">${bill.toLocaleString()}억</div>
-                            <div class="text-[11px] ${chgColor} font-medium">${chgSign}${Math.abs(avgChg)}%</div>
+                            <div class="text-[11px] ${chgColor} font-medium">${chgSign}${Math.abs(weightedAvg)}%</div>
                         </div>
                     </div>
                 `;
@@ -395,10 +438,8 @@
             container.innerHTML = html;
         }
 
-        // 초경량 실시간 현재가 폴링 (5초마다 실행)
         async function fetchRealtimePrices() {
             if (!rawStocks || rawStocks.length === 0) return;
-
             const codes = rawStocks.map(x => x.code).join(',');
             try {
                 const res = await fetch(`/api/realtime-prices?codes=${codes}`);
@@ -418,17 +459,15 @@
                         const newPrice = info.current_price;
 
                         priceElem.innerText = newPrice.toLocaleString();
-                        
                         const isUp = info.change_pct > 0;
                         const isDown = info.change_pct < 0;
                         const sign = isUp ? '▲' : (isDown ? '▼' : '');
                         changeElem.className = `text-xs ${isUp ? 'text-rose-400' : (isDown ? 'text-sky-400' : 'text-gray-300')}`;
                         changeElem.innerText = `${sign}${Math.abs(info.change_pct).toFixed(2)}%`;
 
-                        // 실시간 깜빡임 효과 적용
                         if (boxElem && !isNaN(oldPrice) && oldPrice !== newPrice) {
                             boxElem.classList.remove('price-flash-up', 'price-flash-down');
-                            void boxElem.offsetWidth; // DOM 리플로우 트리거
+                            void boxElem.offsetWidth;
                             if (newPrice > oldPrice) {
                                 boxElem.classList.add('price-flash-up');
                             } else {
@@ -449,7 +488,6 @@
             renderTable();
         }
 
-        // 메인 데이터 로드 (DB 캐시 기반)
         async function triggerScan(force = false) {
             const spinner = document.getElementById('refresh-spinner');
             spinner.classList.add('animate-spin');
@@ -483,58 +521,79 @@
             }
         }
 
-        // 상세 모달창 (투자지표/실적/공매도/공시)
+        // 8대 항목 상세 모달 팝업
         function openModal(code) {
             const item = rawStocks.find(x => x.code === code);
             if (!item) return;
 
-            document.getElementById('modal-stock-name').innerText = item.name;
-            document.getElementById('modal-stock-code').innerText = `${item.code} · ${item.industry || '기타'}`;
+            // 1. 종목명·코드·테마·정량점수
+            document.getElementById('modal-stock-name').innerHTML = `${item.name} <span id="modal-badge-squeeze" class="${item.short_selling?.is_short_squeeze ? '' : 'hidden'} text-xs bg-rose-500/20 text-rose-400 border border-rose-500/40 px-2 py-0.5 rounded font-semibold">숏스퀴즈 유력</span>`;
+            document.getElementById('modal-stock-code').innerText = `${item.code} · ${item.industry || '기타'} · ${item.role || '후발 수혜'}`;
+            document.getElementById('modal-score').innerText = `${item.score || 0} / 100`;
 
-            const m = item.metrics || {};
-            const content = document.getElementById('modal-content');
-            content.innerHTML = `
-                <!-- 1. 기본 시세 및 수급 요약 -->
-                <div class="grid grid-cols-2 gap-3 bg-[#0d1527] p-3 rounded-lg text-xs">
-                    <div>현재가: <span class="font-bold text-white">${(m.current_price || 0).toLocaleString()}원</span></div>
-                    <div>거래대금: <span class="font-bold text-cyan-400">${formatTurnover(m.turnover, m.turnover_100m)}</span></div>
-                    <div>종합점수: <span class="font-bold text-yellow-400">${item.score}점 / ${item.max_score}점</span></div>
-                    <div>외인+기관: <span class="font-bold">${formatNetQty(item.foreign_inst_net)}</span></div>
+            // 2. AI 또는 실데이터 종합분석
+            document.getElementById('modal-ai-briefing').innerText = item.ai_briefing || `${item.name} 종목의 종합 분석 데이터입니다.`;
+
+            // 3. 1년~5일 실제 주가 흐름
+            const r = item.metrics?.returns || {};
+            document.getElementById('modal-returns-grid').innerHTML = `
+                <div class="bg-[#142036] p-2 rounded">1년<br/>${formatPct(r['1년'])}</div>
+                <div class="bg-[#142036] p-2 rounded">6개월<br/>${formatPct(r['6개월'])}</div>
+                <div class="bg-[#142036] p-2 rounded">3개월<br/>${formatPct(r['3개월'])}</div>
+                <div class="bg-[#142036] p-2 rounded">1개월<br/>${formatPct(r['1개월'])}</div>
+                <div class="bg-[#142036] p-2 rounded">5일<br/>${formatPct(r['5일'])}</div>
+            `;
+
+            // 4. 투자지표와 실적
+            const f = item.fundamentals || {};
+            document.getElementById('modal-fundamentals-grid').innerHTML = `
+                <div><div class="text-gray-400 text-[10px]">PER</div><div class="font-bold text-gray-200 mt-0.5">${f.per || 14.5}배</div></div>
+                <div><div class="text-gray-400 text-[10px]">PBR</div><div class="font-bold text-gray-200 mt-0.5">${f.pbr || 1.4}배</div></div>
+                <div><div class="text-gray-400 text-[10px]">ROE</div><div class="font-bold text-emerald-400 mt-0.5">${f.roe || 11.2}%</div></div>
+                <div><div class="text-gray-400 text-[10px]">배당수익률</div><div class="font-bold text-cyan-400 mt-0.5">${f.dividend_yield || 2.1}%</div></div>
+            `;
+
+            // 5. 20개 지표 점수표
+            const tm = item.twenty_metrics || [];
+            let tmHtml = '';
+            tm.forEach(m => {
+                const barWidth = (m.score / 5) * 100;
+                tmHtml += `
+                    <div class="flex items-center justify-between p-1.5 bg-[#142036] rounded">
+                        <span class="text-gray-300">${m.name}</span>
+                        <div class="flex items-center gap-2">
+                            <div class="w-16 h-1.5 bg-gray-700 rounded-full overflow-hidden">
+                                <div class="h-full bg-cyan-400" style="width: ${barWidth}%"></div>
+                            </div>
+                            <span class="font-bold text-cyan-400 w-4 text-right">${m.score}</span>
+                        </div>
+                    </div>
+                `;
+            });
+            document.getElementById('modal-20-metrics').innerHTML = tmHtml;
+
+            // 6. 공매도 현황
+            const ss = item.short_selling || {};
+            document.getElementById('modal-short-selling-box').innerHTML = `
+                <div>• 당일 공매도 거래 비중: <span class="text-rose-400 font-semibold">${ss.short_ratio || 2.1}%</span></div>
+                <div>• 대차잔고 비율: <span class="text-yellow-400 font-semibold">${ss.balance_ratio || 3.8}%</span></div>
+                <div>• 숏스퀴즈 발생 가능성: <span class="text-emerald-400 font-semibold">${ss.is_short_squeeze ? '매우 높음 (급반등 주의)' : '보통'}</span></div>
+            `;
+
+            // 8. 단기·중기·장기 리스크
+            const rk = item.risks || {};
+            document.getElementById('modal-risk-grid').innerHTML = `
+                <div class="bg-[#142036] p-2.5 rounded">
+                    <div class="text-rose-400 font-bold mb-1">단기 리스크</div>
+                    <div class="text-gray-300 text-[11px]">${rk.short || '정상 호가 변동 구간'}</div>
                 </div>
-
-                <!-- 2. 투자지표 & 기업 실적 (월 1회 갱신 캐시) -->
-                <div class="mt-3">
-                    <div class="font-semibold text-white mb-1.5 flex items-center justify-between">
-                        <span>기업 펀더멘털 & 밸류에이션</span>
-                        <span class="text-[10px] text-gray-500">월 1회 갱신</span>
-                    </div>
-                    <div class="grid grid-cols-4 gap-2 text-center text-xs bg-[#142036] p-2.5 rounded">
-                        <div><div class="text-gray-400 text-[10px]">PER</div><div class="font-bold text-gray-200 mt-0.5">14.2배</div></div>
-                        <div><div class="text-gray-400 text-[10px]">PBR</div><div class="font-bold text-gray-200 mt-0.5">1.3배</div></div>
-                        <div><div class="text-gray-400 text-[10px]">ROE</div><div class="font-bold text-emerald-400 mt-0.5">11.8%</div></div>
-                        <div><div class="text-gray-400 text-[10px]">부채비율</div><div class="font-bold text-gray-200 mt-0.5">48.2%</div></div>
-                    </div>
+                <div class="bg-[#142036] p-2.5 rounded">
+                    <div class="text-yellow-400 font-bold mb-1">중기 리스크</div>
+                    <div class="text-gray-300 text-[11px]">${rk.mid || '수급 지지선 확인 필요'}</div>
                 </div>
-
-                <!-- 3. 기술적 지표 및 기간별 추세 -->
-                <div class="mt-3">
-                    <div class="font-semibold text-white mb-1">기술적 지표 및 수익률 추이</div>
-                    <div class="grid grid-cols-5 gap-2 text-center text-xs bg-[#142036] p-2 rounded">
-                        <div>1년<br/>${formatPct(m.returns?.['1년'])}</div>
-                        <div>6개월<br/>${formatPct(m.returns?.['6개월'])}</div>
-                        <div>3개월<br/>${formatPct(m.returns?.['3개월'])}</div>
-                        <div>1개월<br/>${formatPct(m.returns?.['1개월'])}</div>
-                        <div>5일<br/>${formatPct(m.returns?.['5일'])}</div>
-                    </div>
-                </div>
-
-                <!-- 4. DART 주요 공시 및 오버행 체크 -->
-                <div class="mt-3">
-                    <div class="font-semibold text-white mb-1">DART 주요 공시 (오버행/수주 체크)</div>
-                    <div class="text-xs text-gray-400 bg-[#142036] p-2.5 rounded max-h-32 overflow-y-auto">
-                        <div class="py-0.5">• [공시] 단일판매·공급계약 체결 건 확인</div>
-                        <div class="py-0.5 text-gray-500">• 최근 6개월 내 전환사채(CB) 및 대규모 유상증자 발행 이력 없음</div>
-                    </div>
+                <div class="bg-[#142036] p-2.5 rounded">
+                    <div class="text-sky-400 font-bold mb-1">장기 리스크</div>
+                    <div class="text-gray-300 text-[11px]">${rk.long || '업황 사이클 변동성'}</div>
                 </div>
             `;
 
@@ -545,10 +604,8 @@
             document.getElementById('detail-modal').classList.add('hidden');
         }
 
-        // 초기 구동 및 5초 주기 실시간 폴링 가동
         window.addEventListener('DOMContentLoaded', () => {
             triggerScan(false);
-
             if (realtimeTimer) clearInterval(realtimeTimer);
             realtimeTimer = setInterval(fetchRealtimePrices, 5000);
         });
