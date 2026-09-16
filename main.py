@@ -255,8 +255,18 @@ def run_scan() -> dict[str, Any]:
     results.sort(key=lambda x: x["score"], reverse=True)
 
     payload = {
-        "generated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "time_str": dt.datetime.now().strftime("오후 %I:%M"),
+      # 한국 표준시(KST = UTC + 9시간) 적용
+    kst = dt.timezone(dt.timedelta(hours=9))
+    now_kst = dt.datetime.now(kst)
+
+    # 12시간제 오후/오전 한글 포맷팅
+    hour_12 = now_kst.hour if now_kst.hour <= 12 else now_kst.hour - 12
+    ampm = "오후" if now_kst.hour >= 12 else "오전"
+    time_str = f"{ampm} {hour_12:02d}:{now_kst.minute:02d}"
+
+    payload = {
+        "generated_at": now_kst.strftime("%Y-%m-%d %H:%M:%S"),
+        "time_str": time_str,
         "count": len(results),
         "results": results,
         "industry_labels": INDUSTRIES,
@@ -265,6 +275,9 @@ def run_scan() -> dict[str, Any]:
             "dart": "DART ON" if os.getenv("DART_API_KEY") else "DART OFF",
             "krx": "KRX ON",
             "gemini": "Gemini ON" if os.getenv("GEMINI_API_KEY") else "Gemini OFF",
+        }
+    }
+    
         }
     }
     CACHE["data"] = payload
