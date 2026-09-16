@@ -1,20 +1,11 @@
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 import pandas as pd
 import numpy as np
 
 app = FastAPI(
-    title="고정밀 숏스퀴즈 및 종가 베팅 퀀트 API 서버",
-    version="2.1.0"
-)
-
-# CORS 설정
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    title="고정밀 숏스퀴즈 및 종가 베팅 퀀트 대시보드",
+    version="3.2.0"
 )
 
 def load_market_data():
@@ -32,13 +23,11 @@ def load_market_data():
         "수익률_2일": [-0.5, 1.2, 3.0, -1.8, 2.0, 4.5, 3.2, -1.5, -0.4, 0.6],
         "수익률_1일": [5.2, 3.1, 6.8, 1.5, 4.5, 7.5, 4.2, 0.8, 2.5, 3.8],
 
-        # [상세 모달 전용] 중장기 및 추세 수익률 (1년, 6개월, 3개월, 1개월, 20일, 10일) (%)
+        # [상세 모달 전용] 중장기 및 추세 수익률 (1년, 6개월, 3개월, 1개월, 5일) (%)
         "수익률_1년": [48.5, 45.1, 150.4, -48.5, 125.0, 240.5, 185.0, -35.2, 35.4, 65.2],
         "수익률_6개월": [35.2, 30.4, 98.5, -35.2, 78.4, 165.2, 125.4, -25.4, 22.1, 42.5],
         "수익률_3개월": [25.4, 22.0, 65.2, -20.5, 52.1, 110.4, 85.2, -18.5, 15.4, 28.1],
         "수익률_1개월": [18.6, 15.1, 42.1, -12.4, 34.2, 68.5, 52.1, -12.0, 10.2, 18.5],
-        "수익률_20일": [14.2, 11.5, 28.6, -7.5, 21.5, 45.2, 36.4, -8.2, 6.5, 12.4],
-        "수익률_10일": [8.5, 6.2, 15.4, -3.1, 12.0, 22.4, 18.0, -4.5, 3.2, 7.1],
 
         "당일거래대금(억)": [1200, 850, 450, 320, 600, 1100, 950, 150, 220, 410],
         "거래량비율": [2.5, 1.8, 3.1, 1.2, 2.7, 3.5, 2.2, 1.1, 1.6, 2.0],
@@ -70,7 +59,6 @@ def load_market_data():
 def calculate_quant_engine(df):
     """엄격한 숏스퀴즈 게이트, 이격도 과열 감점 및 스코어링 엔진 연산"""
     def process_row(row):
-        # 1. 이격도 기반 과열 감점 룰 (5일선≥108, 10일선≥112, 20일선≥115, 60일선≥130)
         overheat_count = 0
         if row["5일이격도"] >= 108: overheat_count += 1
         if row["10일이격도"] >= 112: overheat_count += 1
@@ -82,7 +70,6 @@ def calculate_quant_engine(df):
         elif overheat_count == 3: penalty = 6
         elif overheat_count >= 4: penalty = 10
 
-        # 2. 상승 가능성 점수 (100점 만점)
         sec_score = 16 
         fund_score = 15 
         sup_score = 15 if (row["외인5일순매수(억)"] > 0 and row["기관5일순매수(억)"] > 0) else 8 
@@ -90,7 +77,6 @@ def calculate_quant_engine(df):
         risk_score = max(0, 15 - penalty)
         growth_score = sec_score + fund_score + sup_score + trend_score + risk_score
 
-        # 3. 종가 베팅 점수 (45점 만점)
         t_amt = row["당일거래대금(억)"]
         s_amt = 6 if t_amt >= 1000 else (5 if t_amt >= 500 else (4 if t_amt >= 300 else (3 if t_amt >= 100 else 0)))
         
@@ -114,7 +100,6 @@ def calculate_quant_engine(df):
 
         closing_score = s_amt + s_vol + s_pos + s_chg + s_body + s_tail + s_align + s_fgn + s_org + s_break
 
-        # 4. 엄격한 숏스퀴즈 8대 조건 게이트 (미충족 시 보너스 0점 고정 및 후보 차단)
         cond_1 = row["공매도잔고비중(%)"] >= 3.0
         cond_2 = row["DtC(일)"] >= 2.0
         cond_3 = row["5일공매도비중(%)"] >= 5.0
@@ -130,11 +115,9 @@ def calculate_quant_engine(df):
         if sq_passed:
             sq_bonus = 5 if (row["공매도잔고비중(%)"] >= 4.5 and row["DtC(일)"] >= 3.5) else 3
 
-        # 5. 최종 우선순위 산식
         closing_normalized = (closing_score / 45.0) * 100
         final_priority = (growth_score * 0.7) + (closing_normalized * 0.3) + sq_bonus
 
-        # 6. 리스크 진단 자동 판정
         short_risk = "안정" if row["5일이격도"] < 108 else "과열 주의"
         medium_risk = "정배열 유지" if row["정배열여부"] else "역배열 이탈 주의"
         long_risk = "추세 상승" if row["수익률_1개월"] > 0 else "장기 하락 압력"
@@ -173,20 +156,206 @@ def calculate_quant_engine(df):
     result["진입판정"] = result.apply(judge, axis=1)
     return result.sort_values(by="최종우선순위점수", ascending=False).reset_index(drop=True)
 
-@app.get("/")
-def read_root():
-    return {"status": "success", "message": "Short Squeeze & Closing Bell Quantitative API is running smoothly."}
+# 루트 접속 시 대시보드 HTML 화면을 즉시 서빙 (index.html 역할 완벽 통합)
+@app.get("/", response_class=HTMLResponse)
+def serve_dashboard():
+    return """
+    <!DOCTYPE html>
+    <html lang="ko">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>고정밀 숏스퀴즈 & 종가 베팅 퀀트 대시보드</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    </head>
+    <body class="bg-slate-950 text-slate-100 font-sans antialiased min-h-screen">
+        <header class="border-b border-slate-800 bg-slate-900/50 backdrop-blur sticky top-0 z-50 px-6 py-4 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <i class="fa-solid fa-chart-line text-blue-500 text-2xl"></i>
+                <h1 class="text-xl font-bold tracking-tight">고정밀 숏스퀴즈 & 종가 베팅 퀀트 시스템</h1>
+            </div>
+            <div class="flex items-center space-x-4 text-sm text-slate-400">
+                <span><i class="fa-regular fa-clock mr-1"></i> 실시간 EOD 스캔 완료</span>
+                <span class="bg-blue-900/50 text-blue-400 border border-blue-700/50 px-3 py-1 rounded-full font-medium">FastAPI Live</span>
+            </div>
+        </header>
+
+        <main class="p-6 max-w-7xl mx-auto space-y-8">
+            <!-- 메인 스크리닝 테이블 -->
+            <section class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold flex items-center">
+                        <i class="fa-solid fa-table-cells text-blue-400 mr-2"></i> 스크리닝 결과 메인 테이블 (초단기 수익률 5일 ~ 1일)
+                    </h2>
+                    <span class="text-xs text-slate-400">기준: 거래대금 100억 이상 / 숏스퀴즈 엄격 게이트 적용</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-sm">
+                        <thead>
+                            <tr class="border-b border-slate-800 text-slate-400 bg-slate-950/50">
+                                <th class="p-3">종목코드</th>
+                                <th class="p-3">종목명</th>
+                                <th class="p-3">섹터</th>
+                                <th class="p-3 text-right">5일</th>
+                                <th class="p-3 text-right">4일</th>
+                                <th class="p-3 text-right">3일</th>
+                                <th class="p-3 text-right">2일</th>
+                                <th class="p-3 text-right">1일 (당일)</th>
+                                <th class="p-3 text-right">거래대금(억)</th>
+                                <th class="p-3 text-center">우선순위 점수</th>
+                                <th class="p-3 text-center">진입 판정</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body" class="divide-y divide-slate-800/60"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 상세 분석 모달/섹션 -->
+            <section id="detail-section" class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-xl space-y-6">
+                <div class="border-b border-slate-800 pb-4 flex justify-between items-center">
+                    <div>
+                        <h2 id="det-title" class="text-xl font-bold flex items-center">
+                            <i class="fa-solid fa-magnifying-glass-chart text-emerald-400 mr-2"></i> 종목을 선택하세요
+                        </h2>
+                        <p id="det-subtitle" class="text-xs text-slate-400 mt-1">상세 진단 리포트</p>
+                    </div>
+                    <div>
+                        <span id="det-badge" class="bg-slate-800 text-slate-300 px-3 py-1 rounded-full text-xs font-bold">대기 중</span>
+                    </div>
+                </div>
+
+                <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg">
+                    <h3 class="text-sm font-semibold text-blue-400 mb-1"><i class="fa-solid fa-robot mr-1"></i> AI & 실데이터 종합 분석 소견</h3>
+                    <p id="det-ai" class="text-sm text-slate-300">표에서 종목을 클릭하면 상세 진단 내용이 출력됩니다.</p>
+                </div>
+
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-400 mb-3"><i class="fa-solid fa-chart-area mr-1"></i> 주가 흐름 시계열 (1년·6개월·3개월·1개월·5일)</h3>
+                    <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">1년 수익률</span><span id="ret-1y" class="text-lg font-bold text-slate-200">-</span></div>
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">6개월 수익률</span><span id="ret-6m" class="text-lg font-bold text-slate-200">-</span></div>
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">3개월 수익률</span><span id="ret-3m" class="text-lg font-bold text-slate-200">-</span></div>
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">1개월 수익률</span><span id="ret-1m" class="text-lg font-bold text-slate-200">-</span></div>
+                        <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">5일 수익률</span><span id="ret-5d" class="text-lg font-bold text-slate-200">-</span></div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-3">
+                        <h3 class="text-sm font-semibold text-slate-300"><i class="fa-solid fa-list-check mr-1"></i> 투자지표 및 이격도 과열 진단</h3>
+                        <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>PER / PBR</span><span id="val-per-pbr" class="text-slate-200">-</span></div>
+                        <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>외인 / 기관 5일 순매수</span><span id="val-net-buy" class="text-slate-200">-</span></div>
+                        <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>이격도 (5/10/20/60일)</span><span id="val-disp" class="text-slate-200">-</span></div>
+                        <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>과열 감점 상태</span><span id="val-penalty" class="text-slate-200">-</span></div>
+                    </div>
+
+                    <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-3">
+                        <h3 class="text-sm font-semibold text-slate-300"><i class="fa-solid fa-shield-halved mr-1"></i> 공매도 현황 및 DART 공시 상태</h3>
+                        <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>공매도 잔고비중</span><span id="val-short-ratio" class="text-slate-200">-</span></div>
+                        <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>DtC (Days to Cover)</span><span id="val-dtc" class="text-slate-200">-</span></div>
+                        <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>DART 최근 공시</span><span class="text-slate-200">단일판매·공급계약 체결 외</span></div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-sm font-semibold text-slate-400 mb-3"><i class="fa-solid fa-triangle-exclamation mr-1"></i> 시계열 리스크 진단 (단기·중기·장기)</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="bg-slate-950 border border-slate-800 p-3 rounded text-center"><span class="text-xs text-slate-400 block">단기 리스크 (5일 이격도)</span><span id="risk-short" class="text-sm font-bold text-slate-200">-</span></div>
+                        <div class="bg-slate-950 border border-slate-800 p-3 rounded text-center"><span class="text-xs text-slate-400 block">중기 리스크 (정배열 추세)</span><span id="risk-medium" class="text-sm font-bold text-slate-200">-</span></div>
+                        <div class="bg-slate-950 border border-slate-800 p-3 rounded text-center"><span class="text-xs text-slate-400 block">장기 리스크 (1개월 모멘텀)</span><span id="risk-long" class="text-sm font-bold text-slate-200">-</span></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <script>
+            let globalData = [];
+
+            async function fetchScreening() {
+                try {
+                    const res = await fetch('/api/screening');
+                    globalData = await res.json();
+                    renderTable();
+                    if (globalData.length > 0) {
+                        fetchDetail(globalData[0].종목코드);
+                    }
+                } catch (err) {
+                    console.error("API 연결 실패:", err);
+                }
+            }
+
+            function renderTable() {
+                const tbody = document.getElementById('table-body');
+                tbody.innerHTML = '';
+                globalData.forEach(row => {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-800/40 transition cursor-pointer";
+                    tr.onclick = () => fetchDetail(row.종목코드);
+                    tr.innerHTML = `
+                        <td class="p-3 font-mono text-slate-400">${row.종목코드}</td>
+                        <td class="p-3 font-bold text-blue-400">${row.종목명}</td>
+                        <td class="p-3 text-slate-300">${row.섹터}</td>
+                        <td class="p-3 text-right text-emerald-400">+${row.수익률_5일}%</td>
+                        <td class="p-3 text-right text-emerald-400">+${row.수익률_4일}%</td>
+                        <td class="p-3 text-right text-emerald-400">+${row.수익률_3일}%</td>
+                        <td class="p-3 text-right text-emerald-400">+${row.수익률_2일}%</td>
+                        <td class="p-3 text-right text-emerald-400 font-bold">+${row.수익률_1일}%</td>
+                        <td class="p-3 text-right">${row['당일거래대금(억)']}억</td>
+                        <td class="p-3 text-center font-bold text-amber-400">${row.최종우선순위점수}점</td>
+                        <td class="p-3 text-center"><span class="bg-slate-800 text-slate-300 px-2 py-1 rounded text-xs font-bold">${row.진입판정}</span></td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            async function fetchDetail(code) {
+                try {
+                    const res = await fetch(`/api/stock/${code}`);
+                    const data = await res.json();
+
+                    document.getElementById('det-title').innerHTML = `<i class="fa-solid fa-magnifying-glass-chart text-emerald-400 mr-2"></i> [${data.종목코드}] ${data.종목명} (${data.섹터}) 상세 진단 리포트`;
+                    document.getElementById('det-subtitle').innerText = `상승가능성 ${data.정량점수.상승가능성점수}점 | 종가베팅 ${data.정량점수.종가베팅점수}점 | 최종 우선순위 ${data.정량점수.최종우선순위점수}점`;
+                    document.getElementById('det-badge').innerText = data.공매도현황.숏스퀴즈적합여부;
+                    document.getElementById('det-ai').innerText = data.AI종합분석소견;
+
+                    document.getElementById('ret-1y').innerText = `${data.주가흐름시계열.수익률_1년}%`;
+                    document.getElementById('ret-6m').innerText = `${data.주가흐름시계열.수익률_6개월}%`;
+                    document.getElementById('ret-3m').innerText = `${data.주가흐름시계열.수익률_3개월}%`;
+                    document.getElementById('ret-1m').innerText = `${data.주가흐름시계열.수익률_1개월}%`;
+                    document.getElementById('ret-5d').innerText = `${data.주가흐름시계열.수익률_5일}%`;
+
+                    document.getElementById('val-per-pbr').innerText = `${data.투자지표와실적.PER} / ${data.투자지표와실적.PBR}배`;
+                    document.getElementById('val-net-buy').innerText = `+${data.투자지표와실적.외인5일순매수}억 / +${data.투자지표와실적.기관5일순매수}억`;
+                    document.getElementById('val-disp').innerText = `${data.이격도및과열진단['5일이격도']} / ${data.이격도및과열진단['10일이격도']} / ${data.이격도및과열진단['20일이격도']} / ${data.이격도및과열진단['60일이격도']}`;
+                    document.getElementById('val-penalty').innerText = `과열 ${data.이격도및과열진단.과열개수}개 (-${data.이격도및과열진단.과열감점}점)`;
+
+                    document.getElementById('val-short-ratio').innerText = `${data.공매도현황.공매도잔고비중}% (기준 ≥ 3%)`;
+                    document.getElementById('val-dtc').innerText = `${data.공매도현황.DtC}일 (기준 ≥ 2일)`;
+
+                    document.getElementById('risk-short').innerText = data.시계열리스크진단.단기리스크;
+                    document.getElementById('risk-medium').innerText = data.시계열리스크진단.중기리스크;
+                    document.getElementById('risk-long').innerText = data.시계열리스크진단.장기리스크;
+                } catch (err) {
+                    console.error("상세 데이터 로드 실패:", err);
+                }
+            }
+
+            window.onload = fetchScreening;
+        </script>
+    </body>
+    </html>
+    """
 
 @app.get("/api/screening")
 def get_screening_data():
-    """메인 스크리닝 결과 (5일~1일 초단기 수익률 및 점수 포함)"""
     raw_df = load_market_data()
     df = calculate_quant_engine(raw_df)
     return df.to_dict(orient="records")
 
 @app.get("/api/stock/{stock_code}")
 def get_stock_detail(stock_code: str):
-    """특정 종목 상세분석 데이터 (1년~5일 시계열, 이격도, 20개 지표, DART 공시, 리스크 진단)"""
     raw_df = load_market_data()
     df = calculate_quant_engine(raw_df)
     
@@ -205,7 +374,7 @@ def get_stock_detail(stock_code: str):
             "최종우선순위점수": row["최종우선순위점수"],
             "진입판정": row["진입판정"]
         },
-        "AI종합분석소견": f"공매도 잔고비중({row['공매도잔고비중(%)']}%) 및 DtC({row['DtC(일']}일) 기준 {'충족' if row['숏스퀴즈적합여부']=='🔴 Squeeze Candidate' else '미달'}. 대금 유입 및 모멘텀 지속 관찰 중.",
+        "AI종합분석소견": f"공매도 잔고비중({row['공매도잔고비중(%)']}%) 및 DtC({row['DtC(일)']}일) 기준 {'충족' if row['숏스퀴즈적합여부']=='🔴 Squeeze Candidate' else '미달'}. 대금 유입 및 모멘텀 지속 관찰 중.",
         "주가흐름시계열": {
             "수익률_1년": row["수익률_1년"],
             "수익률_6개월": row["수익률_6개월"],
