@@ -1,22 +1,25 @@
 """SQLite 기반 주식 데이터 및 분석 지표 영구 보존 모듈 (db.py)"""
 
-import json
+from __future__ import annotations
+
 import sqlite3
+from pathlib import Path
 from typing import Any
 
-DB_PATH = "market_data.db"
+# Render 컨테이너 작업 디렉터리 혼선 방지를 위한 절대 경로 고정
+DB_PATH = Path(__file__).resolve().parent / "market_data.db"
 
 
 def get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, timeout=30.0)
-    # WAL 모드 활성화 (스케줄러가 쓰는 중에도 웹 조회가 멈추지 않음)
+    conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
+    # WAL 모드 활성화: 백그라운드 쓰기 중에도 웹 조회(SELECT)가 차단되지 않음
     conn.execute("PRAGMA journal_mode=WAL;")
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def init_db():
-    """테이블 초기화"""
+    """테이블 초기화 및 무결성 보장"""
     with get_connection() as conn:
         cursor = conn.cursor()
 
@@ -81,7 +84,7 @@ def init_db():
         );
         """)
 
-        # 5. 시장 메타데이터 (최종 스캔 시점 등)
+        # 5. 시장 메타데이터 (최종 스캔 세션 시각 등)
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS market_meta (
             key TEXT PRIMARY KEY,
@@ -140,7 +143,7 @@ def get_all_candidates() -> list[dict[str, Any]]:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM daily_candidates ORDER BY score DESC, turnover DESC;")
         rows = cursor.fetchall()
-        
+
         results = []
         for row in rows:
             r = dict(row)
