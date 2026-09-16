@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (KIS 실패 시 Web Fallback 탑재판)"""
+"""한국 주식 돈의 흐름 스크리너 대시보드 (KIS 실패 시 Web Fallback 탑재판)"""
 
 from __future__ import annotations
 
