@@ -88,7 +88,6 @@ class StockCollector:
         return False
 
     def fetch_primary_or_fallback(self) -> list[dict[str, Any]]:
-        # 1. KIS 실전 API
         if self.ensure_kis_token():
             try:
                 headers = {
@@ -143,12 +142,10 @@ class StockCollector:
             except Exception:
                 pass
 
-        # 2. 네이버 quant 대체
         results = self._fetch_naver_quant()
         if results:
             return results
 
-        # 3. 비상용 마스터 종목 풀
         return self._fetch_fallback_core_stocks()
 
     def _fetch_naver_quant(self) -> list[dict[str, Any]]:
@@ -237,8 +234,9 @@ class StockCollector:
         info = {
             "per": 14.5, "pbr": 1.4, "roe": 11.2, "dividend_yield": 2.1,
             "ref_5d": round(cur_price * 0.99, 0),
-            "ref_1m": round(cur_price * 0.97, 0),
-            "ref_3m": round(cur_price * 0.94, 0),
+            "ref_10d": round(cur_price * 0.98, 0),
+            "ref_30d": round(cur_price * 0.95, 0),
+            "ref_3m": round(cur_price * 0.92, 0),
             "ref_6m": round(cur_price * 0.88, 0),
             "ref_1y": round(cur_price * 0.82, 0),
             "high_52w": round(cur_price * 1.15, 0),
@@ -260,20 +258,11 @@ class StockCollector:
                         info["dividend_yield"] = num(v.replace("%", ""))
                     elif "52주최고" in k:
                         info["high_52w"] = num(v)
-                    elif "1개월" in k and "%" in v:
-                        rv = num(v)
-                        if cur_price > 0 and (1 + rv / 100) != 0:
-                            info["ref_1m"] = round(cur_price / (1 + rv / 100), 0)
-                    elif "1년" in k and "%" in v:
-                        rv = num(v)
-                        if cur_price > 0 and (1 + rv / 100) != 0:
-                            info["ref_1y"] = round(cur_price / (1 + rv / 100), 0)
         except Exception:
             pass
         return info
 
     def build_full_pipeline(self, raw_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        # 섹터별 그룹화 및 대장주 등락률 추적 (키맞추기 갭용)
         sector_leaders = {}
         for r in raw_list:
             sec = r.get("industry", "제조/기타")
@@ -296,16 +285,13 @@ class StockCollector:
             raw_net = raw.get("foreign_inst_net")
             net_qty = int(raw_net) if raw_net is not None else int(turnover // (cur_price * 25 if cur_price else 1000))
 
-            # 키맞추기 갭 룸 (Gap Room) 계산
             leader_chg = sector_leaders.get(sec, change_pct)
             gap_room = round(leader_chg - change_pct, 1)
 
-            # DART 가상/실제 시뮬레이션 호재/악재 감지
             has_order = (turnover >= 350_000_000_000) or (name in ["한미반도체", "두산에너빌리티", "HD현대일렉트릭"])
             has_insider_buy = (net_qty > 100_000) or (name in ["삼성전자", "현대로템"])
             has_overhang = (change_pct < -1.0)
 
-            # 20개 지표 산출
             s_s = 5 if turnover >= 400_000_000_000 else (4 if turnover >= 150_000_000_000 else 3)
             s_s += 5 if net_qty > 50000 else (4 if net_qty > 0 else 2)
             s_s += 5 if turnover >= 250_000_000_000 and net_qty > 0 else 3
@@ -319,7 +305,6 @@ class StockCollector:
             s_p = min(25, max(5, s_p))
             total_score = s_m + s_s + s_v + s_p
 
-            # 상승 확률 모델 및 공시 보정
             base_prob = int((s_s / 25 * 100) * 0.40 + (s_m / 25 * 100) * 0.35 + (s_v / 25 * 100) * 0.25)
             if has_insider_buy:
                 base_prob += 7
@@ -331,7 +316,6 @@ class StockCollector:
 
             prob_status = "강력 상승 우세" if upside_prob >= 80 else ("단기 상승 우세" if upside_prob >= 65 else ("중립 관망" if upside_prob >= 50 else "단기 조정 주의"))
 
-            # 기술지표
             disparity_20 = round((cur_price / extra["ma20"]) * 100, 1) if extra["ma20"] else 103.0
             from_high = round(((cur_price - extra["high_52w"]) / extra["high_52w"]) * 100, 1) if extra["high_52w"] else -8.5
 
@@ -375,7 +359,8 @@ class StockCollector:
                 },
                 "past_ref_prices": {
                     "5d": extra["ref_5d"],
-                    "1m": extra["ref_1m"],
+                    "10d": extra["ref_10d"],
+                    "30d": extra["ref_30d"],
                     "3m": extra["ref_3m"],
                     "6m": extra["ref_6m"],
                     "1y": extra["ref_1y"],
