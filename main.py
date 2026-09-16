@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (Render 배포용 main.py)"""
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (Render FastAPI 호환판 main.py)"""
 
 from __future__ import annotations
 
@@ -18,13 +18,14 @@ from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
-from flask import Flask, jsonify, render_template, send_from_directory, request
+from fastapi import FastAPI, Query
+from fastapi.responses import HTMLResponse, JSONResponse
 from dotenv import load_dotenv
 import requests
 
 load_dotenv()
 
-app = Flask(__name__, template_folder=".", static_folder=".")
+app = FastAPI(title="Korea Stock Money Flow Screener")
 
 KIS_BASE = "https://openapi.koreainvestment.com:9443"
 DART_BASE = "https://opendart.fss.or.kr/api"
@@ -114,7 +115,7 @@ class KisClient:
         response.raise_for_status()
         token = response.json().get("access_token")
         if not token:
-            raise RuntimeError("한투 토큰 발급 실패")
+            raise RuntimeError("한투 접근 토큰 발급 실패")
         return token
 
     def get(self, path: str, tr_id: str, params: dict[str, Any]) -> dict[str, Any]:
@@ -129,7 +130,7 @@ class KisClient:
         response.raise_for_status()
         payload = response.json()
         if str(payload.get("rt_cd", "0")) not in ("0", ""):
-            raise RuntimeError(payload.get("msg1") or f"한투 API 조회 실패 ({tr_id})")
+            raise RuntimeError(payload.get("msg1") or f"한투 API 실패 ({tr_id})")
         return payload
 
     def daily_prices(self, code: str, days: int = 370) -> list[dict[str, Any]]:
@@ -186,16 +187,14 @@ class KisClient:
                     "FID_COND_MRKT_DIV_CODE": "J", "FID_COND_SCR_DIV_CODE": "20171", "FID_INPUT_ISCD": "0000",
                     "FID_DIV_CLS_CODE": "0", "FID_BLNG_CLS_CODE": "0", "FID_TRGT_CLS_CODE": "111111111",
                     "FID_TRGT_EXLS_CLS_CODE": "0000000000", "FID_INPUT_PRICE_1": "0", "FID_INPUT_PRICE_2": "0",
-                    "FID_VOL_CNT": "0", "FID_INPUT_DATE_1": "0",
-                },
+                    "FID_VOL_CNT": "0", "FID_INPUT_DATE_1": "0"},
             ),
             (
                 "/uapi/domestic-stock/v1/quotations/foreign-institution-total",
                 "FHPTJ04400000",
                 {
                     "FID_COND_MRKT_DIV_CODE": "V", "FID_COND_SCR_DIV_CODE": "16449", "FID_INPUT_ISCD": "0000",
-                    "FID_DIV_CLS_CODE": "0", "FID_RANK_SORT_CLS_CODE": "0", "FID_ETC_CLS_CODE": "0",
-                },
+                    "FID_DIV_CLS_CODE": "0", "FID_RANK_SORT_CLS_CODE": "0", "FID_ETC_CLS_CODE": "0"},
             ),
         ]
         for path, tr_id, params in calls:
@@ -257,7 +256,7 @@ class DartClient:
 
 def score_stock(prices: list[dict[str, Any]], candidate: dict[str, Any]) -> tuple[list[ScoreItem], dict[str, Any], int]:
     if len(prices) < 20:
-        raise ValueError("점수 계산에 필요한 일봉 부족")
+        raise ValueError("일봉 데이터 부족")
     closes = [num(first(x, "stck_clpr")) for x in prices]
     opens = [num(first(x, "stck_oprc")) for x in prices]
     highs = [num(first(x, "stck_hgpr")) for x in prices]
@@ -308,18 +307,18 @@ def score_stock(prices: list[dict[str, Any]], candidate: dict[str, Any]) -> tupl
     add("양봉마감", 4 if candle >= 3 else 3 if candle >= 1 else 2 if candle > 0 else 1 if candle == 0 else 0, 4, round(candle, 2))
     add("고가근접", 4 if high_near >= 95 else 3 if high_near >= 90 else 2 if high_near >= 80 else 1 if high_near >= 70 else 0, 4, round(high_near, 2))
     add("윗꼬리제한", 3 if upper_wick <= 5 else 2 if upper_wick <= 10 else 1 if upper_wick <= 20 else 0, 3, round(upper_wick, 2))
-    
+
     conditions = [ma[5] and ma[10] and ma[5] > ma[10], ma[10] and ma[20] and ma[10] > ma[20], ma[5] and current > ma[5]]
     met = sum(bool(x) for x in conditions)
     aligned = bool(ma[5] and ma[10] and ma[20] and current > ma[5] > ma[10] > ma[20])
     add("단기이평정배열", 6 if aligned else 5 if met == 3 else 3 if met == 2 else 1 if met == 1 else 0, 6, {"충족": met, "완전정배열": aligned})
-    
+
     foreign_1 = foreign_pbmn if foreign_pbmn != 0 else foreign_qty
     inst_1 = inst_pbmn if inst_pbmn != 0 else inst_qty
     add("외국인순매수", 4 if foreign_1 > 0 else 2 if foreign_1 == 0 else 0, 6, foreign_1)
     add("기관순매수", 3 if inst_1 > 0 else 1 if inst_1 == 0 else 0, 5, inst_1)
     add("순매수대금/거래대금", 5 if net_ratio >= 30 else 4 if net_ratio >= 20 else 3 if net_ratio >= 10 else 2 if net_ratio >= 0 else 0, 5, round(net_ratio, 2))
-    
+
     d5 = pct_change(current, ma[5] or 0) or 0
     add("5일이평선", 4 if d5 >= 3 else 3 if d5 >= 1 else 2 if d5 >= 0 else 1 if d5 >= -3 else 0, 4, round(d5, 2))
     d60 = pct_change(current, ma[60] or 0) if ma[60] else None
@@ -327,7 +326,7 @@ def score_stock(prices: list[dict[str, Any]], candidate: dict[str, Any]) -> tupl
     d120 = pct_change(current, ma[120] or 0) if ma[120] else None
     add("120일이평선", 0 if d120 is None else 4 if d120 >= 10 else 3 if d120 >= 5 else 2 if d120 >= 0 else 1 if d120 >= -5 else 0, 4, None if d120 is None else round(d120, 2))
     add("52주신고가", 5 if current >= year_high else 4 if price_pos >= -3 else 3 if price_pos >= -10 else 1 if price_pos >= -20 else 0, 5, round(price_pos, 2))
-    
+
     prior_gap = pct_change(current, prior_high) or 0
     volume_up = volumes[-1] > avg20_volume
     add("전고점돌파", 5 if current > prior_high and volume_up else 4 if current > prior_high else 3 if prior_gap >= -3 else 1 if prior_gap >= -10 else 0, 5, {"괴리율": round(prior_gap, 2), "거래량증가": volume_up})
@@ -341,7 +340,6 @@ def score_stock(prices: list[dict[str, Any]], candidate: dict[str, Any]) -> tupl
             return pct_change(current, closes[-(n + 1)])
         return None
 
-    # 프론트엔드가 요구하는 기간별 수익률 객체 (6개월/1년 '미확보' 해결)
     metrics = {
         "current_price": current,
         "change_pct": round(change, 2),
@@ -366,15 +364,13 @@ def score_stock(prices: list[dict[str, Any]], candidate: dict[str, Any]) -> tupl
 def analyze_code(code: str, name: str, candidate: dict[str, Any], kis: KisClient, dart: DartClient | None) -> dict[str, Any]:
     prices = kis.daily_prices(code)
     score_items, metrics, net_qty_total = score_stock(prices, candidate)
-
-    # 업종 분류 '기타' 고정 해결
     industry_val = str(first(candidate, "bstp_kor_isnm", "industry_name", "industry", default="기타"))
 
     return {
         "code": code,
         "name": name or candidate.get("name") or code,
         "industry": industry_val,
-        "foreign_inst_net": net_qty_total,  # 프론트엔드 '외인+기관' 0주 해결
+        "foreign_inst_net": net_qty_total,
         "role": "직접 수혜" if net_qty_total > 50000 else "후발 수혜",
         "score": sum(x.score for x in score_items),
         "max_score": sum(x.maximum for x in score_items),
@@ -384,7 +380,7 @@ def analyze_code(code: str, name: str, candidate: dict[str, Any], kis: KisClient
     }
 
 
-# --- 웹 대시보드 API 및 렌더링 라우트 ---
+# --- FastAPI 엔드포인트 라우트 ---
 
 CACHE = {"data": None, "last_updated": None}
 
@@ -429,20 +425,18 @@ def run_scan() -> dict[str, Any]:
     return payload
 
 
-@app.route("/")
-def index():
-    return send_from_directory(".", "index.html")
+@app.get("/", response_class=HTMLResponse)
+async def read_index():
+    index_file = Path("index.html")
+    if index_file.exists():
+        return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>index.html 파일을 찾을 수 없습니다.</h1>", status_code=404)
 
 
-@app.route("/api/scan", methods=["GET", "POST"])
-def api_scan():
-    force = request.args.get("force", "false").lower() == "true"
+@app.get("/api/scan")
+@app.post("/api/scan")
+async def api_scan(force: bool = Query(False)):
     if not CACHE["data"] or force:
         data = run_scan()
-        return jsonify(data)
-    return jsonify(CACHE["data"])
-
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host="0.0.0.0", port=port)
+        return JSONResponse(content=data)
+    return JSONResponse(content=CACHE["data"])
