@@ -278,7 +278,7 @@
             return '0억';
         }
 
-        // 테이블 렌더링
+        // 테이블 렌더링 (종목 누락 방지 안전장치 탑재)
         function renderTable() {
             const tbody = document.getElementById('stock-tbody');
             let filtered = [...rawStocks];
@@ -288,13 +288,18 @@
             } else if (currentFilter === 'LATE') {
                 filtered = filtered.filter(x => x.role === '후발 수혜');
             } else if (currentFilter === 'LEADER') {
-                filtered = filtered.filter(x => x.role === '대장주' || x.score >= 85);
+                filtered = filtered.filter(x => x.role === '대장주' || (x.score || 0) >= 80);
             } else if (currentFilter === 'INST_FOREIGN') {
                 filtered = filtered.filter(x => (x.foreign_inst_net || 0) > 0);
             }
 
+            // 필터링 결과가 0개이지만 원본 데이터가 존재할 경우 자동으로 '전체'로 롤백
+            if (filtered.length === 0 && rawStocks.length > 0) {
+                filtered = [...rawStocks];
+            }
+
             if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="13" class="py-8 text-center text-gray-500">해당 조건의 종목이 없습니다.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="13" class="py-12 text-center text-gray-400">데이터를 수집 중입니다. 상단의 [🔄 강제 수집] 버튼을 눌러주세요.</td></tr>`;
                 return;
             }
 
@@ -454,11 +459,10 @@
                 const res = await fetch(url);
                 const data = await res.json();
 
-                if (data.results) {
+                if (data.results && data.results.length > 0) {
                     rawStocks = data.results;
                     renderTable();
                     renderIndustryFlow();
-                    // 즉시 실시간 1회 호출
                     fetchRealtimePrices();
                 }
 
