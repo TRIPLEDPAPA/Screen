@@ -1,188 +1,142 @@
-"""SQLite 기반 주식 데이터 및 분석 지표 영구 보존 모듈 (db.py)"""
+import pandas as pd
+import numpy as np
 
-from __future__ import annotations
+def load_sample_data():
+    """KRX 및 DART 연동을 대체하는 샘플 데이터 생성 함수"""
+    np.random.seed(42)
+    data = {
+        "종목코드": ["005930", "000660", "042700", "035720", "028300", "247540", "086520", "003680", "112040", "010140"],
+        "종목명": ["삼성전자", "SK하이닉스", "한미반도체", "카카오", "HLB", "에코프로비엠", "에코프로", "한성기업", "위메이드", "삼성중공업"],
+        "섹터": ["반도체", "반도체", "반도체", "IT/소프트웨어", "제약/바이오", "2차전지", "2차전지", "음식료", "게임", "조선/중공업"],
+        
+        # [메인 테이블 전용] 초단기 수익률 (5일 ~ 1일)
+        "수익률_5일": [4.2, 2.1, 8.5, -1.2, 6.4, 12.5, 9.1, -2.0, 1.5, 3.2],
+        "수익률_4일": [1.5, 0.8, 4.2, -0.5, 3.1, 5.2, 4.0, -0.8, 0.9, 1.4],
+        "수익률_3일": [2.8, 3.5, 6.1, 0.2, 4.5, 8.1, 6.5, 0.5, 2.1, 2.8],
+        "수익률_2일": [-0.5, 1.2, 3.0, -1.8, 2.0, 4.5, 3.2, -1.5, -0.4, 0.6],
+        "수익률_1일": [5.2, 3.1, 6.8, 1.5, 4.5, 7.5, 4.2, 0.8, 2.5, 3.8],
 
-import json
-import sqlite3
-from pathlib import Path
-from typing import Any
+        # [상세 모달 전용] 중장기 및 추세 수익률 (10일 ~ 1년)
+        "수익률_10일": [8.5, 6.2, 15.4, -3.1, 12.0, 22.4, 18.0, -4.5, 3.2, 7.1],
+        "수익률_20일": [14.2, 11.5, 28.6, -7.5, 21.5, 45.2, 36.4, -8.2, 6.5, 12.4],
+        "수익률_30일": [18.6, 15.1, 42.1, -12.4, 34.2, 68.5, 52.1, -12.0, 10.2, 18.5],
+        "수익률_3개월": [25.4, 22.0, 65.2, -20.5, 52.1, 110.4, 85.2, -18.5, 15.4, 28.1],
+        "수익률_6개월": [35.2, 30.4, 98.5, -35.2, 78.4, 165.2, 125.4, -25.4, 22.1, 42.5],
+        "수익률_1년": [48.5, 45.1, 150.4, -48.5, 125.0, 240.5, 185.0, -35.2, 35.4, 65.2],
 
-DB_PATH = Path(__file__).resolve().parent / "market_data.db"
+        "당일거래대금(억)": [1200, 850, 450, 320, 600, 1100, 950, 150, 220, 410],
+        "거래량비율": [2.5, 1.8, 3.1, 1.2, 2.7, 3.5, 2.2, 1.1, 1.6, 2.0],
+        "종가위치(%)": [85, 75, 92, 60, 88, 95, 80, 50, 65, 78],
+        "윗꼬리비율(%)": [12, 18, 5, 35, 10, 3, 15, 40, 25, 14],
+        "5일이격도": [103, 101, 106, 97, 104, 109, 102, 98, 100, 101],
+        "10일이격도": [105, 103, 108, 99, 106, 113, 104, 99, 102, 103],
+        "20일이격도": [107, 104, 111, 98, 109, 116, 107, 98, 103, 105],
+        "60일이격도": [115, 110, 125, 95, 118, 132, 115, 96, 105, 108],
+        "정배열여부": [True, True, True, False, True, True, True, False, True, True],
+        "외인5일순매수(억)": [150, 80, 40, -20, 90, 200, 110, -5, 10, 30],
+        "기관5일순매수(억)": [80, 50, -10, -30, 60, 120, 70, 2, -5, 45],
+        "공매도잔고비중(%)": [1.2, 2.5, 3.8, 0.5, 4.2, 5.1, 4.8, 0.2, 1.0, 0.8],
+        "DtC(일)": [1.0, 1.8, 2.5, 0.5, 3.1, 4.2, 3.8, 0.2, 0.9, 0.7],
+        "5일공매도비중(%)": [2.1, 3.5, 5.6, 1.0, 6.2, 7.5, 6.8, 0.5, 1.8, 2.0],
+        "동시호가체결플러스": [True, True, True, False, True, True, True, False, True, True],
+        "수급확정여부": ["장 마감 확정", "장 마감 확정", "장중 추정", "장중 추정", "장 마감 확정", "장 마감 확정", "장중 추정", "장 마감 확정", "장중 추정", "장 마감 확정"]
+    }
+    return pd.DataFrame(data)
 
+def calculate_quant_scores(df):
+    """상승 가능성, 종가 베팅, 과열 감점 및 숏스퀴즈 점수 일괄 계산"""
+    def compute(row):
+        # 1. 과열 감점 룰
+        overheat_count = 0
+        if row["5일이격도"] >= 108: overheat_count += 1
+        if row["10일이격도"] >= 112: overheat_count += 1
+        if row["20일이격도"] >= 115: overheat_count += 1
+        if row["60일이격도"] >= 130: overheat_count += 1
 
-def get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.row_factory = sqlite3.Row
-    return conn
+        penalty = 0
+        if overheat_count == 2: penalty = 3
+        elif overheat_count == 3: penalty = 6
+        elif overheat_count >= 4: penalty = 10
 
+        # 2. 상승 가능성 점수 (100점)
+        sec_score = 16 
+        fund_score = 15 
+        sup_score = 15 if (row["외인5일순매수(억)"] > 0 and row["기관5일순매수(억)"] > 0) else 8 
+        trend_score = 22 if row["정배열여부"] else 10 
+        risk_score = 15 - penalty 
+        growth_score = max(0, sec_score + fund_score + sup_score + trend_score + risk_score)
 
-def init_db():
-    with get_connection() as conn:
-        cursor = conn.cursor()
+        # 3. 종가 베팅 점수 (45점)
+        t_amt = row["당일거래대금(억)"]
+        s_amt = 6 if t_amt >= 1000 else (5 if t_amt >= 500 else (4 if t_amt >= 300 else (3 if t_amt >= 100 else 0)))
+        
+        v_rat = row["거래량비율"]
+        s_vol = 5 if v_rat >= 3 else (4 if v_rat >= 2 else (3 if v_rat >= 1.5 else (1 if v_rat >= 1.2 else 0)))
 
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS daily_candidates (
-            code TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            industry TEXT,
-            role TEXT,
-            score INTEGER,
-            max_score INTEGER,
-            current_price REAL,
-            change_pct REAL,
-            turnover REAL,
-            turnover_100m REAL,
-            foreign_inst_net INTEGER,
-            ref_5d REAL,
-            ref_4d REAL,
-            ref_3d REAL,
-            ref_2d REAL,
-            ref_1d REAL,
-            detail_json TEXT,
-            updated_at TEXT
-        );
-        """)
+        c_pos = row["종가위치(%)"]
+        s_pos = 5 if c_pos >= 90 else (4 if c_pos >= 80 else (3 if c_pos >= 70 else (1 if c_pos >= 60 else 0)))
 
-        cursor.execute("PRAGMA table_info(daily_candidates);")
-        columns = [row["name"] for row in cursor.fetchall()]
-        for col in ["ref_5d", "ref_4d", "ref_3d", "ref_2d", "ref_1d"]:
-            if col not in columns:
-                cursor.execute(f"ALTER TABLE daily_candidates ADD COLUMN {col} REAL;")
-        if "detail_json" not in columns:
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN detail_json TEXT;")
+        chg = row["수익률_1일"]
+        s_chg = 4 if (3 <= chg <= 8) else (3 if (1 <= chg < 3) else (2 if (8 < chg <= 12) else (1 if 0 <= chg < 1 else 0)))
 
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS market_meta (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        );
-        """)
-        conn.commit()
+        s_body = 3 if c_pos >= 70 else 2
+        w_tail = row["윗꼬리비율(%)"]
+        s_tail = 3 if w_tail <= 10 else (2 if w_tail <= 20 else (1 if w_tail <= 30 else 0))
 
+        s_align = 5 if row["정배열여부"] else 0
+        s_fgn = 5 if row["외인5일순매수(억)"] > 100 else (3 if row["외인5일순매수(억)"] > 0 else 0)
+        s_org = 4 if row["기관5일순매수(억)"] > 50 else (2 if row["기관5일순매수(억)"] > 0 else 0)
+        s_break = 5 if row["종가위치(%)"] >= 80 else 3
 
-def upsert_candidates(candidates: list[dict[str, Any]], time_str: str):
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        for item in candidates:
-            m = item.get("metrics", {})
-            ref = item.get("past_ref_prices", {})
+        closing_score = s_amt + s_vol + s_pos + s_chg + s_body + s_tail + s_align + s_fgn + s_org + s_break
 
-            detail_data = {
-                "fundamentals": item.get("fundamentals", {}),
-                "short_selling": item.get("short_selling", {}),
-                "twenty_metrics": item.get("twenty_metrics", []),
-                "risks": item.get("risks", {}),
-                "ai_briefing": item.get("ai_briefing", ""),
-                "upside_probability": item.get("upside_probability", 50),
-                "upside_status": item.get("upside_status", "중립 관망"),
-                "technical": item.get("technical", {})
-            }
+        # 4. 숏스퀴즈 조건 검증 (8가지 조건)
+        sq_count = 0
+        if row["공매도잔고비중(%)"] >= 3.0: sq_count += 1
+        if row["DtC(일)"] >= 2.0: sq_count += 1
+        if row["5일공매도비중(%)"] >= 5.0: sq_count += 1
+        if row["거래량비율"] >= 2.0: sq_count += 1
+        if row["정배열여부"]: sq_count += 1
+        if row["수익률_1일"] >= 3.0: sq_count += 1
+        if row["종가위치(%)"] >= 70.0: sq_count += 1
+        if row["당일거래대금(억)"] >= 100: sq_count += 1
 
-            cursor.execute("""
-            INSERT INTO daily_candidates (
-                code, name, industry, role, score, max_score,
-                current_price, change_pct, turnover, turnover_100m,
-                foreign_inst_net, ref_5d, ref_4d, ref_3d, ref_2d, ref_1d, detail_json, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(code) DO UPDATE SET
-                name=excluded.name,
-                industry=excluded.industry,
-                role=excluded.role,
-                score=excluded.score,
-                max_score=excluded.max_score,
-                current_price=excluded.current_price,
-                change_pct=excluded.change_pct,
-                turnover=excluded.turnover,
-                turnover_100m=excluded.turnover_100m,
-                foreign_inst_net=excluded.foreign_inst_net,
-                ref_5d=excluded.ref_5d,
-                ref_4d=excluded.ref_4d,
-                ref_3d=excluded.ref_3d,
-                ref_2d=excluded.ref_2d,
-                ref_1d=excluded.ref_1d,
-                detail_json=excluded.detail_json,
-                updated_at=excluded.updated_at;
-            """, (
-                item["code"], item["name"], item.get("industry", "기타"),
-                item.get("role", "후발 수혜"), item.get("score", 0), item.get("max_score", 100),
-                m.get("current_price", 0), m.get("change_pct", 0), m.get("turnover", 0),
-                m.get("turnover_100m", 0), item.get("foreign_inst_net", 0),
-                ref.get("5d"), ref.get("4d"), ref.get("3d"), ref.get("2d"), ref.get("1d"),
-                json.dumps(detail_data, ensure_ascii=False),
-                time_str
-            ))
+        sq_bonus = 0
+        if sq_count >= 7: sq_bonus = 5
+        elif sq_count >= 5: sq_bonus = 3
+        elif sq_count >= 3: sq_bonus = 2
 
-        cursor.execute("INSERT OR REPLACE INTO market_meta (key, value) VALUES ('base_time', ?)", (time_str,))
-        conn.commit()
+        # 5. 최종 우선순위 산식
+        closing_normalized = (closing_score / 45.0) * 100
+        final_priority = (growth_score * 0.7) + (closing_normalized * 0.3) + sq_bonus
 
+        return pd.Series({
+            "상승가능성점수": growth_score,
+            "종가베팅점수": closing_score,
+            "과열개수": overheat_count,
+            "과열감점": penalty,
+            "숏스퀴즈충족조건수": sq_count,
+            "숏스퀴즈보너스": sq_bonus,
+            "최종우선순위점수": round(final_priority, 2)
+        })
 
-def get_all_candidates() -> list[dict[str, Any]]:
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM daily_candidates ORDER BY score DESC, turnover DESC;")
-        rows = cursor.fetchall()
+    score_df = df.apply(compute, axis=1)
+    result = pd.concat([df, score_df], axis=1)
 
-        results = []
-        for row in rows:
-            r = dict(row)
-            detail_dict = {}
-            if r.get("detail_json"):
-                try:
-                    detail_dict = json.loads(r["detail_json"])
-                except Exception:
-                    pass
+    def status_rule(row):
+        if (row["상승가능성점수"] >= 75 and 
+            row["종가베팅점수"] >= 34 and 
+            row["당일거래대금(억)"] >= 100 and 
+            row["거래량비율"] >= 2.0 and
+            row["종가위치(%)"] >= 70 and
+            row["정배열여부"] and
+            row["동시호가체결플러스"]):
+            
+            if row["최종우선순위점수"] >= 85: return "🔴 최우선 검토"
+            elif row["최종우선순위점수"] >= 78: return "🟠 적극 관찰"
+            else: return "🟡 눌림목 대기"
+        else:
+            return "⚪ 진입 보류"
 
-            cur_p = r["current_price"] or 1.0
-            r5d = round(((cur_p - (r["ref_5d"] or cur_p)) / (r["ref_5d"] or cur_p)) * 100, 1)
-            r4d = round(((cur_p - (r["ref_4d"] or cur_p)) / (r["ref_4d"] or cur_p)) * 100, 1)
-            r3d = round(((cur_p - (r["ref_3d"] or cur_p)) / (r["ref_3d"] or cur_p)) * 100, 1)
-            r2d = round(((cur_p - (r["ref_2d"] or cur_p)) / (r["ref_2d"] or cur_p)) * 100, 1)
-            r1d = round(((cur_p - (r["ref_1d"] or cur_p)) / (r["ref_1d"] or cur_p)) * 100, 1)
-
-            results.append({
-                "code": r["code"],
-                "name": r["name"],
-                "industry": r["industry"],
-                "role": r["role"],
-                "score": r["score"],
-                "max_score": r["max_score"],
-                "foreign_inst_net": r["foreign_inst_net"],
-                "metrics": {
-                    "current_price": r["current_price"],
-                    "change_pct": r["change_pct"],
-                    "turnover": r["turnover"],
-                    "turnover_100m": r["turnover_100m"],
-                    "returns": {
-                        "5일": r5d,
-                        "4일": r4d,
-                        "3일": r3d,
-                        "2일": r2d,
-                        "1일": r1d
-                    }
-                },
-                "past_ref_prices": {
-                    "5d": r["ref_5d"],
-                    "4d": r["ref_4d"],
-                    "3d": r["ref_3d"],
-                    "2d": r["ref_2d"],
-                    "1d": r["ref_1d"],
-                },
-                "fundamentals": detail_dict.get("fundamentals", {}),
-                "short_selling": detail_dict.get("short_selling", {}),
-                "twenty_metrics": detail_dict.get("twenty_metrics", []),
-                "risks": detail_dict.get("risks", {}),
-                "ai_briefing": detail_dict.get("ai_briefing", ""),
-                "upside_probability": detail_dict.get("upside_probability", 50),
-                "upside_status": detail_dict.get("upside_status", "중립 관망"),
-                "technical": detail_dict.get("technical", {})
-            })
-        return results
-
-
-def get_meta(key: str, default: str = "") -> str:
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM market_meta WHERE key = ?", (key,))
-        row = cursor.fetchone()
-        return row["value"] if row else default
+    result["진입판정"] = result.apply(status_rule, axis=1)
+    return result.sort_values(by="최종우선순위점수", ascending=False).reset_index(drop=True)
