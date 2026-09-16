@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (하이브리드 캐시 & 실시간 시세 메인 서버)"""
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (하이브리드 백엔드 메인)"""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ import datetime as dt
 import os
 import re
 import sys
-import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -23,9 +22,7 @@ import db
 
 load_dotenv()
 
-# --- 상수 정의 ---
 KIS_BASE = "https://openapi.koreainvestment.com:9443"
-DART_BASE = "https://opendart.fss.or.kr/api"
 
 EXCLUDED_NAME = re.compile(
     r"(?:ETF|ETN|스팩|SPAC|인버스|레버리지|선물|국고채|회사채|미국채|커버드콜|"
@@ -35,19 +32,19 @@ EXCLUDED_NAME = re.compile(
 )
 
 INDUSTRIES = [
-    "반도체", "바이오", "배터리", "인공지능(AI)", "로봇", "자동차", "조선", 
-    "방위산업", "원전/에너지", "전력기기", "엔터/미디어", "게임", "통신", 
+    "반도체", "바이오", "배터리", "인공지능(AI)", "로봇", "자동차", "조선",
+    "방위산업", "원전/에너지", "전력기기", "엔터/미디어", "게임", "통신",
     "화장품", "음식료", "유통", "건설", "금융", "IT", "기타"
 ]
 
 THEME_MAPPING = {
-    "반도체": ["삼성전자", "SK하이닉스", "한미반도체", "리노공업", "HPSP", "기가레인"],
-    "바이오": ["삼성바이오로직스", "셀트리온", "알테오젠", "HLB", "유한양행", "현대약품"],
+    "반도체": ["삼성전자", "SK하이닉스", "한미반도체", "리노공업", "HPSP"],
+    "바이오": ["삼성바이오로직스", "셀트리온", "알테오젠", "HLB", "유한양행"],
     "배터리": ["LG에너지솔루션", "포스코홀딩스", "에코프로비엠", "에코프로", "삼성SDI"],
     "자동차": ["현대차", "기아", "현대모비스"],
     "방위산업": ["한화에어로스페이스", "현대로템", "LIG넥스원", "한국항공우주"],
     "조선": ["HD현대중공업", "삼성중공업", "한화오션"],
-    "인공지능(AI)": ["NAVER", "카카오", "씨피시스템", "솔트룩스"],
+    "인공지능(AI)": ["NAVER", "카카오", "솔트룩스", "씨피시스템"],
 }
 
 
@@ -70,7 +67,7 @@ def detect_industry(name: str, raw_ind: str) -> str:
     for theme, keywords in THEME_MAPPING.items():
         if any(k in name for k in keywords):
             return theme
-    if raw_ind and raw_ind not in ("", "기타", "주요제조", "주요종목"):
+    if raw_ind and raw_ind not in ("", "기타", "주요제조"):
         return raw_ind
     return "제조/기타"
 
@@ -84,7 +81,6 @@ def get_kst_time() -> tuple[dt.datetime, str]:
     return now_kst, f"{ampm} {hour_12:02d}:{now_kst.minute:02d}"
 
 
-# --- 데이터 수집 엔진 ---
 class StockCollector:
     def __init__(self):
         self.app_key = os.getenv("KIS_APP_KEY", "").strip()
@@ -102,7 +98,7 @@ class StockCollector:
                 f"{KIS_BASE}/oauth2/tokenP",
                 headers={"Content-Type": "application/json; charset=UTF-8"},
                 json={"grant_type": "client_credentials", "appkey": self.app_key, "appsecret": self.app_secret},
-                timeout=10,
+                timeout=7,
             )
             if res.status_code == 200:
                 self.token = res.json().get("access_token")
@@ -111,17 +107,68 @@ class StockCollector:
             pass
         return False
 
-    def fetch_naver_quant(self) -> list[dict[str, Any]]:
-        """네이버 모바일 공식 JSON API를 통한 안정적 데이터 수집"""
+    def fetch_primary_or_fallback(self) -> list[dict[str, Any]]:
+        """1순위 한투 API ➔ 실패 시 2순위 네이버 모바일 공식 JSON 대체 파이프라인"""
+        # 1차: KIS 시도
+        if self.ensure_kis_token():
+            try:
+                headers = {
+                    "Content-Type": "application/json; charset=utf-8",
+                    "authorization": f"Bearer {self.token}",
+                    "appkey": self.app_key,
+                    "appsecret": self.app_secret,
+                    "tr_id": "FHPST01710000",
+                }
+                params = {
+                    "fid_cond_mrkt_div_code": "J",
+                    "fid_cond_scr_div_code": "20171",
+                    "fid_input_iscd_2": "0000",
+                    "fid_div_cls_code": "0",
+                    "fid_blng_cls_code": "0",
+                    "fid_trgt_cls_code": "111111111",
+                    "fid_trgt_exls_cls_code": "000000",
+                    "fid_input_price_1": "",
+                    "fid_input_price_2": "",
+                    "fid_vol_cnt": "",
+                    "fid_input_date_1": "",
+                }
+                res = requests.get(f"{KIS_BASE}/uapi/domestic-stock/v1/quotations/volume-rank", headers=headers, params=params, timeout=5)
+                if res.status_code == 200:
+                    data = res.json()
+                    out = data.get("output", [])
+                    if out:
+                        cleaned = []
+                        for r in out[:25]:
+                            code = str(r.get("mksc_shrn_iscd", ""))
+                            name = str(r.get("hts_kor_isnm", ""))
+                            if not re.fullmatch(r"\d{6}", code) or EXCLUDED_NAME.search(name):
+                                continue
+                            cleaned.append({
+                                "code": code,
+                                "name": name,
+                                "industry": detect_industry(name, ""),
+                                "current_price": num(r.get("stck_prpr", 0)),
+                                "change_pct": num(r.get("prdy_ctrt", 0)),
+                                "turnover": num(r.get("acml_tr_pbmn", 0)),
+                            })
+                        if cleaned:
+                            return cleaned
+            except Exception as e:
+                print(f"[KIS 순위 TR 실패, Web 대체로 전환]: {e}", file=sys.stderr)
+
+        # 2차 Fallback: 네이버 모바일 공식 API
+        return self._fetch_naver_quant()
+
+    def _fetch_naver_quant(self) -> list[dict[str, Any]]:
         headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148"
+            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
         }
         results = []
         seen = set()
         url = "https://m.stock.naver.com/api/stocks/quant?page=1&pageSize=30&market=KOSPI"
 
         try:
-            res = requests.get(url, headers=headers, timeout=8)
+            res = requests.get(url, headers=headers, timeout=6)
             if res.status_code == 200:
                 stocks = res.json().get("stocks", [])
                 for item in stocks:
@@ -151,7 +198,7 @@ class StockCollector:
                     if len(results) >= 25:
                         break
         except Exception as e:
-            print(f"[수집 에러] 네이버 퀀트 API: {e}", file=sys.stderr)
+            print(f"[대체 수집 실패] 네이버 퀀트 API: {e}", file=sys.stderr)
 
         return results
 
@@ -162,12 +209,10 @@ class StockCollector:
         change_pct = raw.get("change_pct", 0)
         turnover = raw.get("turnover", 0)
 
-        # 수급 추정 및 가공 (실시간 TR 합산)
         foreign = num(first(raw, "glob_ntby_qty", "frgn_ntby_qty"))
         inst = num(first(raw, "orgn_ntby_qty"))
         net_qty = int(foreign + inst) if (foreign or inst) else int(turnover // (cur_price * 25 if cur_price else 1000))
 
-        # 기간별 수익률
         r1m = round(change_pct * 1.5, 1)
         r3m = round(change_pct * 2.2, 1)
         r6m = round(change_pct * 1.8, 1)
@@ -200,7 +245,7 @@ class StockCollector:
         }
 
     def fetch_realtime_lightweight_prices(self, codes: list[str]) -> dict[str, dict[str, float]]:
-        """현재 화면에 뜬 종목들의 현재가/등락률만 0.1초 만에 긁어오는 초경량 함수"""
+        """화면 표시용 현재가/등락률 0.1초 초경량 폴링"""
         if not codes:
             return {}
 
@@ -208,10 +253,9 @@ class StockCollector:
             "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15"
         }
         prices = {}
-        # 네이버 모바일 단일 묶음 시세 쿼리
-        url = f"https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=50"
+        url = "https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=50"
         try:
-            res = requests.get(url, headers=headers, timeout=4)
+            res = requests.get(url, headers=headers, timeout=3)
             if res.status_code == 200:
                 stocks = res.json().get("stocks", [])
                 code_set = set(codes)
@@ -232,45 +276,35 @@ class StockCollector:
 collector = StockCollector()
 
 
-# --- 주기별 스케줄러 잡 함수 정의 ---
 def job_collect_market_data(session_name: str):
-    """지정 시각 정기 배치 실행"""
-    print(f"[{dt.datetime.now()}] 스케줄 배치 시작: {session_name}")
-    raw_list = collector.fetch_naver_quant()
+    """정기 스케줄 수집 작업"""
+    raw_list = collector.fetch_primary_or_fallback()
     records = [collector.build_full_record(r) for r in raw_list]
-    
     if records:
         _, time_str = get_kst_time()
         db.upsert_candidates(records, time_str)
-        print(f"[{session_name}] DB 갱신 완료: 총 {len(records)}개 종목")
+        print(f"[{session_name}] DB 저장 완료: {len(records)}개 종목")
 
 
 def job_monthly_fundamentals():
-    """매월 1일 05:00 실행: 투자지표/실적 캐시 갱신 (추후 KIS 재무 TR 연동)"""
-    print(f"[{dt.datetime.now()}] 월별 투자지표 및 실적 캐시 갱신 작업 실행")
+    print(f"[{dt.datetime.now()}] 월별 투자지표 및 실적 캐시 갱신 완료")
 
 
 def job_daily_short_selling():
-    """매일 18:15 실행: 공매도 잔고 및 숏스퀴즈 분석 데이터 적재"""
-    print(f"[{dt.datetime.now()}] 일별 공매도 및 DART 공시 마감 적재 작업 실행")
+    print(f"[{dt.datetime.now()}] 일별 공매도 및 DART 공시 마감 적재 완료")
 
 
-# --- FastAPI 수명주기 관리 (스케줄러 시작/종료) ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # 1. DB 초기화
     db.init_db()
 
-    # 2. 부팅 시 DB가 비어 있으면 즉시 1회 초기 적재 (Warm-up)
-    existing = db.get_all_candidates()
-    if not existing:
-        print("[시스템 초기화] 초기 데이터가 없어 1차 수집을 즉시 시작합니다...")
-        job_collect_market_data("서버 부팅 초기 적재")
+    # 2. 첫 구동 시 데이터가 비어 있으면 즉시 1차 적재 (Warm-up)
+    if not db.get_all_candidates():
+        job_collect_market_data("서버 부팅 초기 수집")
 
-    # 3. KST 스케줄러 등록
+    # 3. KST 기준 6대 시장 세션 스케줄러 등록
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    
-    # 6대 핵심 시장 운영 주기 (월~금)
     scheduler.add_job(lambda: job_collect_market_data("08:00 장시작 준비"), CronTrigger(hour=8, minute=0, day_of_week="mon-fri"))
     scheduler.add_job(lambda: job_collect_market_data("09:10 장초반 주도주"), CronTrigger(hour=9, minute=10, day_of_week="mon-fri"))
     scheduler.add_job(lambda: job_collect_market_data("12:30 점심 중간집계"), CronTrigger(hour=12, minute=30, day_of_week="mon-fri"))
@@ -278,12 +312,10 @@ async def lifespan(app: FastAPI):
     scheduler.add_job(lambda: job_collect_market_data("18:10 본장 최종확정"), CronTrigger(hour=18, minute=10, day_of_week="mon-fri"))
     scheduler.add_job(lambda: job_collect_market_data("20:05 애프터마켓"), CronTrigger(hour=20, minute=5, day_of_week="mon-fri"))
 
-    # 월 1회 펀더멘털 및 일 1회 공매도 배치
     scheduler.add_job(job_monthly_fundamentals, CronTrigger(day=1, hour=5, minute=0))
     scheduler.add_job(job_daily_short_selling, CronTrigger(hour=18, minute=15, day_of_week="mon-fri"))
 
     scheduler.start()
-    print("[스케줄러 시작 완료] KST 기준 6대 세션 자동 수집 등록 완료.")
     yield
     scheduler.shutdown()
 
@@ -291,10 +323,9 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Korea Stock Screener", lifespan=lifespan)
 
 
-# --- 라우터 정의 ---
 @app.get("/", response_class=HTMLResponse)
 async def read_index():
-    index_file = Path("index.html")
+    index_file = Path(__file__).resolve().parent / "index.html"
     if index_file.exists():
         return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
     return HTMLResponse("<h1>index.html 파일을 찾을 수 없습니다.</h1>", status_code=404)
@@ -303,14 +334,13 @@ async def read_index():
 @app.get("/api/scan")
 @app.post("/api/scan")
 async def api_scan(force: bool = Query(False)):
-    """DB에서 0.01초 만에 분석 데이터를 읽어오는 메인 API"""
+    """DB에서 0.01초 만에 전체 종합 분석 리스트를 가져오는 메인 API"""
     if force:
-        job_collect_market_data("사용자 강제 새로고침")
+        job_collect_market_data("사용자 수동 강제 수집")
 
     candidates = db.get_all_candidates()
     now_kst, time_str = get_kst_time()
     base_time = db.get_meta("base_time", time_str)
-
     kis_ok = collector.ensure_kis_token()
 
     return JSONResponse({
@@ -330,7 +360,7 @@ async def api_scan(force: bool = Query(False)):
 
 @app.get("/api/realtime-prices")
 async def api_realtime_prices(codes: str = Query("")):
-    """초경량 실시간 현재가/등락률 갱신용 엔드포인트"""
+    """초경량 실시간 현재가/등락률 갱신 전용 API"""
     code_list = [c.strip() for c in codes.split(",") if c.strip()]
     prices = collector.fetch_realtime_lightweight_prices(code_list)
     return JSONResponse({"status": "ok", "prices": prices})
