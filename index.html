@@ -3,144 +3,279 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>종가배팅 실시간 스캐너</title>
+  <title>종가배팅 & 스마트머니 정량 스캐너</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <style>
     body { background-color: #0b0f19; color: #f1f5f9; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .custom-scroll::-webkit-scrollbar { width: 5px; height: 5px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
   </style>
 </head>
-<body class="pb-12">
+<body class="pb-16 md:pb-8">
 
-  <header class="sticky top-0 z-30 bg-[#0b0f19]/90 backdrop-blur-md border-b border-slate-800 px-4 py-3">
-    <div class="flex justify-between items-center max-w-4xl mx-auto">
+  <!-- 상단 네비게이션 헤더 -->
+  <header class="sticky top-0 z-30 bg-[#0b0f19]/95 backdrop-blur-md border-b border-slate-800 px-4 py-3">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-center max-w-6xl mx-auto gap-2">
       <div class="flex items-center gap-2">
-        <span class="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
         <h1 class="font-extrabold text-base tracking-tight text-rose-500 flex items-center gap-1.5">
-          <i class="fa-solid fa-bolt-lightning"></i> 종가배팅 머니플로우
+          <i class="fa-solid fa-layer-group"></i> 종가배팅 & 머니플로우 퀀트
         </h1>
+        <span class="text-[11px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">보통주 중심</span>
       </div>
-      <button onclick="fetchData()" id="refreshBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-1">
-        <i class="fa-solid fa-rotate"></i> 새로고침
-      </button>
+      <div class="flex items-center gap-2 text-xs w-full md:w-auto justify-between md:justify-end">
+        <span id="updateTime" class="text-slate-500 font-mono text-[11px]">갱신시각: -</span>
+        <button onclick="fetchData()" id="refreshBtn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg border border-slate-700 transition flex items-center gap-1.5">
+          <i class="fa-solid fa-rotate"></i> 새로 분석
+        </button>
+      </div>
     </div>
   </header>
 
-  <main class="max-w-4xl mx-auto p-4 space-y-4">
+  <!-- 메인 컨테이너 -->
+  <main class="max-w-6xl mx-auto p-4 space-y-4">
 
-    <div class="grid grid-cols-3 gap-2 text-center text-xs">
-      <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl">
-        <span class="text-slate-400 block text-[11px]">외인 동향</span>
-        <span id="foreignFlow" class="font-bold text-emerald-400">+1,420억</span>
+    <!-- 검색창 및 실시간 섹터 자금 흐름 바 -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div class="relative md:col-span-2">
+        <input type="text" id="searchInput" onkeyup="if(event.key==='Enter') fetchData()" placeholder="종목명 또는 6자리 코드 검색 (예: 한미반도체, 042700)"
+               class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-rose-500 pl-10 text-white">
+        <i class="fa-solid fa-magnifying-glass absolute left-3.5 top-3.5 text-slate-500 text-xs"></i>
       </div>
-      <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl">
-        <span class="text-slate-400 block text-[11px]">기관 동향</span>
-        <span id="instFlow" class="font-bold text-rose-400">-580억</span>
-      </div>
-      <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-xl">
-        <span class="text-slate-400 block text-[11px]">마감 시간</span>
-        <span id="clock" class="font-bold text-amber-400">15:15:00</span>
+      <div class="bg-slate-900/80 border border-slate-800 rounded-xl px-3 py-2 flex items-center justify-between text-xs">
+        <span class="text-slate-400">포착된 주도주</span>
+        <span id="totalCandidateCount" class="font-bold text-rose-400 text-sm">0개</span>
       </div>
     </div>
 
-    <div class="bg-slate-900/60 border border-slate-800 px-3.5 py-2.5 rounded-xl flex items-center justify-between text-xs">
-      <span class="text-slate-300">
-        <i class="fa-solid fa-filter text-rose-400 mr-1"></i>
-        <strong>포착 기준:</strong> 거래대금 300억↑ · 고가대비 -3% 이내
-      </span>
-      <span id="itemCount" class="text-slate-500 font-medium">0종목 포착</span>
+    <!-- 섹터 TOP 자금 집중 태그 -->
+    <div class="flex items-center gap-2 overflow-x-auto custom-scroll pb-1 text-xs">
+      <span class="text-slate-500 whitespace-nowrap text-[11px] font-semibold"><i class="fa-solid fa-fire text-amber-400"></i> 자금 유입 섹터:</span>
+      <div id="sectorTags" class="flex gap-1.5">
+        <!-- 동적 섹터 태그 -->
+      </div>
     </div>
 
-    <div id="stockList" class="space-y-3"></div>
+    <!-- 분석 후보 목록 카드 뷰 (모바일/PC 반응형 2열) -->
+    <div id="stockList" class="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+      <!-- 동적 카드 렌더링 -->
+    </div>
 
   </main>
 
-  <script>
-    function updateTime() {
-      const now = new Date();
-      document.getElementById('clock').innerText = now.toTimeString().split(' ')[0];
-    }
-    setInterval(updateTime, 1000);
-    updateTime();
+  <!-- 종목 상세분석 모달 팝업 -->
+  <div id="detailModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-3">
+    <div class="bg-slate-900 border border-slate-700 w-full max-w-2xl rounded-2xl max-h-[90vh] overflow-y-auto custom-scroll p-5 space-y-4">
+      
+      <!-- 모달 상단 헤더 -->
+      <div class="flex justify-between items-start border-b border-slate-800 pb-3">
+        <div>
+          <div class="flex items-center gap-2">
+            <h3 id="mName" class="text-xl font-black text-white">-</h3>
+            <span id="mCode" class="text-xs text-slate-400 font-mono bg-slate-800 px-2 py-0.5 rounded">-</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">정량 스코어링 및 공시·수급 다중 검증 리포트</p>
+        </div>
+        <button onclick="closeModal()" class="text-slate-400 hover:text-white text-lg p-1">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
 
+      <!-- AI 및 정량 종합 분석 결과 요약 -->
+      <div class="bg-slate-950/80 p-4 rounded-xl border border-slate-800">
+        <h4 class="text-xs font-bold text-rose-400 mb-1.5 flex items-center gap-1.5">
+          <i class="fa-solid fa-brain"></i> AI & 퀀트 종합 의견
+        </h4>
+        <p id="mAiSummary" class="text-xs text-slate-300 leading-relaxed whitespace-pre-line">분석 중...</p>
+      </div>
+
+      <!-- 20개 지표 100점 점수표 요약 -->
+      <div>
+        <h4 class="text-xs font-bold text-slate-300 mb-2 flex items-center gap-1.5">
+          <i class="fa-solid fa-chart-simple text-amber-400"></i> 핵심 퀀트 지표 검증 결과
+        </h4>
+        <div id="mQuantScores" class="grid grid-cols-2 gap-2 text-xs">
+          <!-- 점수 항목 동적 삽입 -->
+        </div>
+      </div>
+
+      <!-- 최근 6개월 DART 공시 목록 & 위험 분류 -->
+      <div>
+        <h4 class="text-xs font-bold text-slate-300 mb-2 flex items-center gap-1.5">
+          <i class="fa-solid fa-file-shield text-blue-400"></i> 최근 DART 공시 및 리스크 판정
+        </h4>
+        <div id="mDisclosures" class="space-y-1.5 max-h-36 overflow-y-auto custom-scroll text-xs">
+          <!-- 공시 링크 목록 삽입 -->
+        </div>
+      </div>
+
+      <!-- 단기/중기/장기 리스크 체크 -->
+      <div class="bg-slate-950/60 p-3.5 rounded-xl border border-slate-800 text-xs space-y-1.5">
+        <h4 class="font-bold text-slate-400">리스크 요인 분석</h4>
+        <div id="mRisks" class="text-slate-300 space-y-1"></div>
+      </div>
+
+      <!-- 면책 조항 문구 -->
+      <p class="text-[10px] text-slate-500 text-center">
+        * 본 시스템은 정량 알고리즘에 따른 지표 분석 도구이며, 매수를 권유하거나 원금 및 수익을 보장하지 않습니다.
+      </p>
+
+    </div>
+  </div>
+
+  <script>
     async function fetchData() {
       const btn = document.getElementById('refreshBtn');
+      const search = document.getElementById('searchInput').value.trim();
       btn.classList.add('opacity-50');
-      
+
       try {
-        const res = await fetch('/api/closing-bets');
+        let url = '/api/closing-bets';
+        if (search) url += `?search=${encodeURIComponent(search)}`;
+        
+        const res = await fetch(url);
         const data = await res.json();
-        
-        document.getElementById('foreignFlow').innerText = data.market.foreign;
-        document.getElementById('instFlow').innerText = data.market.inst;
-        document.getElementById('itemCount').innerText = `${data.items.length}종목 포착`;
-        
+
+        document.getElementById('updateTime').innerText = `갱신: ${data.updated_at.split(' ')[1]}`;
+        document.getElementById('totalCandidateCount').innerText = `${data.total_candidates}개 종목`;
+
+        renderSectors(data.sectors);
         renderCards(data.items);
-      } catch (err) {
-        console.error("데이터 로드 실패:", err);
+      } catch (e) {
+        console.error("데이터 로드 실패:", e);
       } finally {
         btn.classList.remove('opacity-50');
       }
     }
 
+    function renderSectors(sectors) {
+      const tagContainer = document.getElementById('sectorTags');
+      tagContainer.innerHTML = '';
+      
+      for (const [sec, val] of Object.entries(sectors)) {
+        const span = document.createElement('span');
+        span.className = "bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-[11px] text-slate-300 whitespace-nowrap";
+        span.innerHTML = `<strong>${sec}</strong> <span class="text-rose-400">${val.count}</span>`;
+        tagContainer.appendChild(span);
+      }
+    }
+
     function renderCards(items) {
-      const container = document.getElementById("stockList");
-      container.innerHTML = "";
+      const container = document.getElementById('stockList');
+      container.innerHTML = '';
 
       if (items.length === 0) {
         container.innerHTML = `
-          <div class="bg-slate-900 border border-slate-800 rounded-xl p-8 text-center text-slate-500 text-sm">
-            현재 조건(거래대금 + 고가권 유지)에 만족하는 종목이 없습니다.<br>
-            (장 마감 시간 15:00 ~ 15:30에 다시 확인해 보세요)
+          <div class="col-span-full bg-slate-900 border border-slate-800 rounded-2xl p-8 text-center text-slate-500 text-xs">
+            현재 조건(거래대금 300억↑ · 고가대비 -3.5% 이내 · 보통주)에 부합하는 종목이 없습니다.
           </div>
         `;
         return;
       }
 
-      items.forEach(item => {
-        const card = document.createElement("div");
-        card.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm hover:border-slate-700 transition";
+      items.forEach(stock => {
+        const card = document.createElement('div');
+        card.className = "bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm hover:border-slate-700 transition flex flex-col justify-between";
 
         card.innerHTML = `
-          <div class="flex justify-between items-start mb-2">
-            <div>
-              <div class="flex items-center gap-2">
-                <span class="font-bold text-base text-white">${item.name}</span>
-                <span class="text-xs text-slate-500 font-mono">${item.code}</span>
+          <div>
+            <div class="flex justify-between items-start mb-2">
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="font-bold text-sm text-white">${stock.name}</span>
+                  <span class="text-[10px] text-slate-400 font-mono">${stock.code}</span>
+                  <span class="text-[10px] bg-slate-800 text-slate-300 px-1.5 py-0.2 rounded">${stock.sector}</span>
+                </div>
               </div>
-              <p class="text-[11px] text-slate-400 mt-1">${item.reason}</p>
-            </div>
-            <div class="text-right">
-              <span class="inline-block px-2.5 py-1 rounded text-xs font-black bg-rose-500/20 text-rose-400 border border-rose-500/40">
-                ${item.score}점
+              <span class="px-2 py-0.5 rounded text-xs font-black bg-rose-500/20 text-rose-400 border border-rose-500/30">
+                ${stock.score}점
               </span>
             </div>
+
+            <div class="grid grid-cols-3 gap-2 bg-slate-950/70 p-2.5 rounded-lg border border-slate-800/80 text-center my-2 text-xs">
+              <div>
+                <span class="block text-[10px] text-slate-500">현재가</span>
+                <span class="font-bold text-slate-200">${stock.price.toLocaleString()}원</span>
+              </div>
+              <div>
+                <span class="block text-[10px] text-slate-500">등락률</span>
+                <span class="font-bold text-rose-400">${stock.change}</span>
+              </div>
+              <div>
+                <span class="block text-[10px] text-slate-500">고가괴리</span>
+                <span class="font-bold text-amber-400">${stock.highDiff}</span>
+              </div>
+            </div>
           </div>
 
-          <div class="grid grid-cols-3 gap-2 bg-slate-950/70 p-2.5 rounded-lg border border-slate-800/80 text-center my-3">
-            <div>
-              <span class="block text-[10px] text-slate-500">현재가</span>
-              <span class="text-xs font-bold text-slate-200">${item.price.toLocaleString()}원</span>
-            </div>
-            <div>
-              <span class="block text-[10px] text-slate-500">등락률</span>
-              <span class="text-xs font-bold text-rose-400">${item.change}</span>
-            </div>
-            <div>
-              <span class="block text-[10px] text-slate-500">고가대비 괴리</span>
-              <span class="text-xs font-bold text-amber-400">${item.highDiff}</span>
-            </div>
-          </div>
-
-          <div class="flex justify-between items-center text-xs pt-1 border-t border-slate-800/60">
-            <span class="text-slate-400 text-[11px]">거래대금: <strong class="text-slate-200">${item.vol}</strong></span>
-            <a href="https://m.stock.naver.com/domestic/stock/${item.code}/total" target="_blank" class="text-[11px] text-rose-400 hover:underline">
-              차트 보기 <i class="fa-solid fa-chevron-right text-[9px]"></i>
-            </a>
+          <div class="flex justify-between items-center text-xs pt-2 border-t border-slate-800/80 mt-1">
+            <span class="text-slate-400 text-[11px]">거래대금: <strong class="text-slate-200">${stock.vol}</strong></span>
+            <button onclick="openDetail('${stock.code}', '${stock.name}')" class="bg-rose-600/20 hover:bg-rose-600/30 text-rose-400 border border-rose-500/40 px-2.5 py-1 rounded text-[11px] font-semibold transition">
+              상세 분석
+            </button>
           </div>
         `;
         container.appendChild(card);
       });
+    }
+
+    async function openDetail(code, name) {
+      document.getElementById('detailModal').classList.remove('hidden');
+      document.getElementById('mName').innerText = name;
+      document.getElementById('mCode').innerText = code;
+      document.getElementById('mAiSummary').innerText = "데이터 및 AI 의견 로딩 중...";
+      document.getElementById('mQuantScores').innerHTML = "";
+      document.getElementById('mDisclosures').innerHTML = "";
+      document.getElementById('mRisks').innerHTML = "";
+
+      try {
+        const res = await fetch(`/api/stock-detail/${code}?name=${encodeURIComponent(name)}`);
+        const data = await res.json();
+
+        document.getElementById('mAiSummary').innerText = data.ai_analysis;
+
+        // 퀀트 점수 렌더링
+        const qContainer = document.getElementById('mQuantScores');
+        for (const [k, v] of Object.entries(data.quant.detail_scores)) {
+          qContainer.innerHTML += `
+            <div class="bg-slate-950 p-2 rounded border border-slate-800/70 flex justify-between">
+              <span class="text-slate-400">${k}</span>
+              <span class="font-bold text-slate-200">${v.val}</span>
+            </div>
+          `;
+        }
+
+        // DART 공시 목록 렌더링
+        const dContainer = document.getElementById('mDisclosures');
+        if (data.disclosures && data.disclosures.length > 0) {
+          data.disclosures.forEach(d => {
+            dContainer.innerHTML += `
+              <div class="flex justify-between items-center bg-slate-950 p-1.5 rounded border border-slate-800">
+                <a href="${d.url}" target="_blank" class="text-slate-300 hover:underline truncate max-w-[280px]">${d.title}</a>
+                <span class="${d.color} whitespace-nowrap ml-2 text-[10px]">${d.category}</span>
+              </div>
+            `;
+          });
+        } else {
+          dContainer.innerHTML = `<span class="text-slate-500 text-[11px]">최근 6개월 특이공시 없음 또는 DART 키 대기 중</span>`;
+        }
+
+        // 리스크 렌더링
+        const rContainer = document.getElementById('mRisks');
+        rContainer.innerHTML = `
+          <div>• <strong>단기:</strong> ${data.risks.short_term}</div>
+          <div>• <strong>중기:</strong> ${data.risks.mid_term}</div>
+          <div>• <strong>장기:</strong> ${data.risks.long_term}</div>
+        `;
+
+      } catch (err) {
+        document.getElementById('mAiSummary').innerText = "상세 데이터를 불러오지 못했습니다.";
+      }
+    }
+
+    function closeModal() {
+      document.getElementById('detailModal').classList.add('hidden');
     }
 
     document.addEventListener("DOMContentLoaded", fetchData);
