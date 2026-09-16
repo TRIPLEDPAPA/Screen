@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 대시보드 (KIS 실패 시 Web Fallback 탑재판)"""
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (Render FastAPI 호환 및 KST 시간 보정판)"""
 
 from __future__ import annotations
 
@@ -19,7 +19,6 @@ from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
 from dotenv import load_dotenv
 import requests
-from bs4 import BeautifulSoup
 
 load_dotenv()
 
@@ -56,6 +55,7 @@ def first(row: dict[str, Any], *keys: str, default: Any = "") -> Any:
 
 def pct_change(current: float, previous: float) -> float | None:
     return None if not previous else (current / previous - 1.0) * 100.0
+
 
 # --- KIS Client ---
 class KisClient:
@@ -125,58 +125,55 @@ class KisClient:
         return candidates
 
 
-# --- Web Scraper Fallback (KIS 차단 시 구원 투수) ---
+# --- Web Fallback (BeautifulSoup 없이 정규식으로 안전 파싱) ---
 def fetch_web_fallback_candidates() -> list[dict[str, Any]]:
-    """네이버 금융 거래대금 상위 및 외인/기관 순매수 웹 파싱 (Render 해외IP에서도 작동)"""
     headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
     results = []
     seen = set()
 
-    # 1. 거래대금 상위 25개 종목 수집
-    url = "https://finance.naver.com/sise/sise_quant.naver?sosok=0" # 코스피
+    url = "https://finance.naver.com/sise/sise_quant.naver?sosok=0"
     try:
         res = requests.get(url, headers=headers, timeout=10)
         res.encoding = "euc-kr"
-        soup = BeautifulSoup(res.text, "html.parser")
-        table = soup.find("table", class_="type_2")
-        if table:
-            for tr in table.find_all("tr"):
-                tds = tr.find_all("td")
-                if len(tds) >= 10:
-                    a = tds[1].find("a")
-                    if not a: continue
-                    name = a.text.strip()
-                    code = a.get("href", "").split("code=")[-1]
-                    if not re.fullmatch(r"\d{6}", code) or EXCLUDED_NAME.search(name):
-                        continue
-                    if code in seen: continue
-                    seen.add(code)
+        html = res.text
 
-                    cur_price = num(tds[2].text)
-                    change_rate = num(tds[4].text)
-                    # 상승/하락 부호
-                    if "nv01" in str(tds[3]): # 파랑/하락
-                        change_rate = -abs(change_rate)
+        rows = re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.DOTALL)
+        for row in rows:
+            if 'code=' not in row:
+                continue
+            code_match = re.search(r'href="/item/main\.naver\?code=(\d{6})"[^>]*>([^<]+)</a>', row)
+            if not code_match:
+                continue
+            code, name = code_match.group(1), code_match.group(2).strip()
+            if code in seen or EXCLUDED_NAME.search(name):
+                continue
+            seen.add(code)
 
-                    turnover_val = num(tds[6].text) * 1_000_000 # 백만원 단위
-                    results.append({
-                        "code": code,
-                        "name": name,
-                        "industry": "주요종목",
-                        "current_price": cur_price,
-                        "change_pct": change_rate,
-                        "turnover": turnover_val,
-                    })
-                    if len(results) >= 20:
-                        break
+            tds = re.findall(r'<td[^>]*class="number"[^>]*>([^<]+)</td>', row)
+            if len(tds) >= 4:
+                cur_price = num(tds[0])
+                change_rate = num(tds[2])
+                if "nv01" in row:
+                    change_rate = -abs(change_rate)
+                turnover_val = num(tds[4]) * 1_000_000
+
+                results.append({
+                    "code": code,
+                    "name": name,
+                    "industry": "주요종목",
+                    "current_price": cur_price,
+                    "change_pct": change_rate,
+                    "turnover": turnover_val,
+                })
+                if len(results) >= 25:
+                    break
     except Exception as e:
-        print(f"Web Quant Scraper Error: {e}", file=sys.stderr)
+        print(f"Fallback Parser Error: {e}", file=sys.stderr)
 
     return results
 
 
 def build_stock_record(raw: dict[str, Any]) -> dict[str, Any]:
-    """네이버 또는 KIS 단일 데이터를 화면 규격으로 빌드"""
     code = raw["code"]
     name = raw["name"]
     cur_price = raw.get("current_price") or num(first(raw, "stck_prpr", "close_price"))
@@ -185,12 +182,10 @@ def build_stock_record(raw: dict[str, Any]) -> dict[str, Any]:
     if turnover < 100_000_000 and "acml_vol" in raw:
         turnover = cur_price * num(raw["acml_vol"])
 
-    # 외인/기관 수량
     foreign = num(first(raw, "glob_ntby_qty", "frgn_ntby_qty"))
     inst = num(first(raw, "orgn_ntby_qty"))
-    net_qty = int(foreign + inst) if (foreign or inst) else int(turnover // (cur_price * 20 if cur_price else 1000))
+    net_qty = int(foreign + inst) if (foreign or inst) else int(turnover // (cur_price * 25 if cur_price else 1000))
 
-    # 기간별 수익률 추정치 (단일 스캔 시 안전하게 계산)
     r1m = round(change_pct * 1.5, 1)
     r3m = round(change_pct * 2.2, 1)
     r6m = round(change_pct * 1.8, 1)
@@ -231,7 +226,6 @@ def run_scan() -> dict[str, Any]:
     kis_connected = False
     status_msg = "KIS ON"
 
-    # 1. KIS 시도
     if app_key and app_secret:
         try:
             kis = KisClient(app_key, app_secret)
@@ -239,10 +233,9 @@ def run_scan() -> dict[str, Any]:
             if candidates:
                 kis_connected = True
         except Exception as e:
-            print(f"KIS 연결 실패 -> Web Fallback으로 전환: {e}", file=sys.stderr)
+            print(f"KIS 연결 실패 -> Web Fallback 작동: {e}", file=sys.stderr)
             status_msg = "KIS 차단(Web 대체)"
 
-    # 2. KIS 실패 시 즉시 네이버 웹 크롤링으로 후보군 생성 (절대 0개가 되지 않음)
     results = []
     if candidates:
         for code, row in list(candidates.items())[:25]:
@@ -254,13 +247,12 @@ def run_scan() -> dict[str, Any]:
 
     results.sort(key=lambda x: x["score"], reverse=True)
 
-    payload = {
-      # 한국 표준시(KST = UTC + 9시간) 적용
+    # 한국 표준시(KST, UTC+9) 적용 및 중괄호 정합성 확인
     kst = dt.timezone(dt.timedelta(hours=9))
     now_kst = dt.datetime.now(kst)
 
-    # 12시간제 오후/오전 한글 포맷팅
     hour_12 = now_kst.hour if now_kst.hour <= 12 else now_kst.hour - 12
+    hour_12 = 12 if hour_12 == 0 else hour_12
     ampm = "오후" if now_kst.hour >= 12 else "오전"
     time_str = f"{ampm} {hour_12:02d}:{now_kst.minute:02d}"
 
@@ -278,10 +270,8 @@ def run_scan() -> dict[str, Any]:
         }
     }
     
-        }
-    }
     CACHE["data"] = payload
-    CACHE["last_updated"] = dt.datetime.now()
+    CACHE["last_updated"] = now_kst
     return payload
 
 
