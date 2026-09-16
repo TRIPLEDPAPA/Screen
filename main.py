@@ -1,488 +1,102 @@
-#!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (하이브리드 백엔드 메인)"""
+import streamlit as st
+import pandas as pd
+from db import load_sample_data, calculate_quant_scores
 
-from __future__ import annotations
-
-import datetime as dt
-import os
-import re
-import sys
-from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any
-
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
-from dotenv import load_dotenv
-from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse, JSONResponse
-import requests
-
-import db
-import sector_master
-
-load_dotenv()
-
-KIS_BASE = "https://openapi.koreainvestment.com:9443"
-
-EXCLUDED_NAME = re.compile(
-    r"(?:ETF|ETN|스팩|SPAC|인버스|레버리지|선물|국고채|회사채|미국채|커버드콜|"
-    r"KODEX|TIGER|RISE|ACE|SOL|HANARO|ARIRANG|KOSEF|PLUS|FOCUS|TIMEFOLIO|"
-    r"^[가-힣A-Za-z0-9 .&-]+우(?:B|C|선주)?$)",
-    re.IGNORECASE,
+# 페이지 설정
+st.set_page_config(
+    page_title="고정밀 숏스퀴즈 및 종가 베팅 퀀트 대시보드",
+    layout="wide"
 )
 
+st.title("🎯 고정밀 숏스퀴즈 & 종가 베팅 퀀트 대시보드")
+st.markdown("메인 테이블(5일~1일 초단기)과 상세 모달(10일~1년 중장기) 시계열 분리 및 상하 단일 컬럼 레이아웃 시스템입니다.")
+st.markdown("---")
 
-def num(value: Any, default: float = 0.0) -> float:
-    try:
-        return float(str(value).replace(",", "").replace("%", "").strip())
-    except (TypeError, ValueError):
-        return default
+# 데이터 로드 및 연산
+raw_df = load_sample_data()
+result_df = calculate_quant_scores(raw_df)
 
+# ---------------------------------------------------------
+# 1. 메인 테이블 (초단기 수익률 5일 ~ 1일 집중 추적)
+# ---------------------------------------------------------
+st.subheader("📊 1. 스크리닝 결과 메인 테이블 (초단기 수익률 5일 ~ 1일)")
+main_columns = [
+    "종목코드", "종목명", "섹터", 
+    "수익률_5일", "수익률_4일", "수익률_3일", "수익률_2일", "수익률_1일",
+    "당일거래대금(억)", "상승가능성점수", "종가베팅점수", "숏스퀴즈보너스", "최종우선순위점수", "진입판정"
+]
+st.dataframe(result_df[main_columns], use_container_width=True)
 
-def first(row: dict[str, Any], *keys: str, default: Any = "") -> Any:
-    for key in keys:
-        value = row.get(key)
-        if value not in (None, ""):
-            return value
-    return default
+st.markdown("---")
 
+# ---------------------------------------------------------
+# 2. 상세 분석 모달 / 섹션 (세로 상하 단일 컬럼 배치)
+# ---------------------------------------------------------
+st.subheader("🔍 2. 종목별 상세 분석 및 📑 DART 수주 타임라인 (세로 상하 배치)")
 
-def get_kst_time() -> tuple[dt.datetime, str]:
-    kst = dt.timezone(dt.timedelta(hours=9))
-    now_kst = dt.datetime.now(kst)
-    hour_12 = now_kst.hour if now_kst.hour <= 12 else now_kst.hour - 12
-    hour_12 = 12 if hour_12 == 0 else hour_12
-    ampm = "오후" if now_kst.hour >= 12 else "오전"
-    return now_kst, f"{ampm} {hour_12:02d}:{now_kst.minute:02d}"
+selected_stock = st.selectbox("상세 분석할 종목을 선택하세요:", result_df["종목명"].tolist())
+target_row = result_df[result_df["종목명"] == selected_stock].iloc[0]
 
+st.markdown(f"### 📌 [{target_row['종목코드']}] {target_row['종목명']} 상세 진단 리포트")
 
-class StockCollector:
-    def __init__(self):
-        self.app_key = os.getenv("KIS_APP_KEY", "").strip()
-        self.app_secret = os.getenv("KIS_APP_SECRET", "").strip()
-        self.dart_key = os.getenv("DART_API_KEY", "").strip()
-        self.token = None
+# [상세 분석 전용] 중장기 및 추세 수익률 (10일 ~ 1년) 시계열 뷰
+with st.container():
+    st.markdown("#### 📈 [상세 분석] 중장기 및 추세 수익률 시계열 (10일 ~ 1년)")
+    m1, m2, m3, m4, m5, m6 = st.columns(6)
+    m1.metric("10일 수익률", f"{target_row['수익률_10일']}%")
+    m2.metric("20일 수익률", f"{target_row['수익률_20일']}%")
+    m3.metric("30일 수익률", f"{target_row['수익률_30일']}%")
+    m4.metric("3개월 수익률", f"{target_row['수익률_3개월']}%")
+    m5.metric("6개월 수익률", f"{target_row['수익률_6개월']}%")
+    m6.metric("1년 수익률", f"{target_row['수익률_1년']}%")
 
-    def ensure_kis_token(self) -> bool:
-        if not self.app_key or not self.app_secret:
-            return False
-        if self.token:
-            return True
-        try:
-            res = requests.post(
-                f"{KIS_BASE}/oauth2/tokenP",
-                headers={"Content-Type": "application/json; charset=UTF-8"},
-                json={
-                    "grant_type": "client_credentials",
-                    "appkey": self.app_key,
-                    "appsecret": self.app_secret,
-                },
-                timeout=5,
-            )
-            if res.status_code == 200:
-                self.token = res.json().get("access_token")
-                return bool(self.token)
-        except Exception:
-            pass
-        return False
+st.markdown("---")
 
-    def fetch_primary_or_fallback(self) -> list[dict[str, Any]]:
-        if self.ensure_kis_token():
-            try:
-                headers = {
-                    "Content-Type": "application/json; charset=utf-8",
-                    "authorization": f"Bearer {self.token}",
-                    "appkey": self.app_key,
-                    "appsecret": self.app_secret,
-                    "tr_id": "FHPST01710000",
-                }
-                params = {
-                    "fid_cond_mrkt_div_code": "J",
-                    "fid_cond_scr_div_code": "20171",
-                    "fid_input_iscd_2": "0000",
-                    "fid_div_cls_code": "0",
-                    "fid_blng_cls_code": "0",
-                    "fid_trgt_cls_code": "111111111",
-                    "fid_trgt_exls_cls_code": "000000",
-                    "fid_input_price_1": "",
-                    "fid_input_price_2": "",
-                    "fid_vol_cnt": "",
-                    "fid_input_date_1": "",
-                }
-                res = requests.get(
-                    f"{KIS_BASE}/uapi/domestic-stock/v1/quotations/volume-rank",
-                    headers=headers,
-                    params=params,
-                    timeout=5,
-                )
-                if res.status_code == 200:
-                    out = res.json().get("output", [])
-                    cleaned = []
-                    for r in out:
-                        code = str(r.get("mksc_shrn_iscd", ""))
-                        name = str(r.get("hts_kor_isnm", ""))
-                        if not re.fullmatch(r"\d{6}", code) or EXCLUDED_NAME.search(name):
-                            continue
-                        sec, role, _ = sector_master.get_stock_profile(name)
-                        cleaned.append({
-                            "code": code,
-                            "name": name,
-                            "industry": sec,
-                            "base_role": role,
-                            "current_price": num(r.get("stck_prpr", 0)),
-                            "change_pct": num(r.get("prdy_ctrt", 0)),
-                            "turnover": num(r.get("acml_tr_pbmn", 0)),
-                            "foreign_inst_net": int(num(r.get("glob_ntby_qty", 0))),
-                        })
-                        if len(cleaned) >= 80:
-                            break
-                    if cleaned:
-                        return cleaned
-            except Exception:
-                pass
+# 대분류 1: 공매도 및 수급 압박 섹션
+with st.container():
+    st.markdown("#### 📂 [대분류 1] 공매도 및 수급 압박 섹션")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("공매도 잔고비중", f"{target_row['공매도잔고비중(%)']}%", "기준 ≥ 3%")
+    c2.metric("숏커버 소요일 (DtC)", f"{target_row['DtC(일)']}일", "기준 ≥ 2일")
+    c3.metric("5일 공매도 비중", f"{target_row['5일공매도비중(%)']}%", "기준 ≥ 5%")
+    
+    st.markdown(f"* **숏스퀴즈 충족 조건 수:** {target_row['숏스퀴즈충족조건수']}/8개 (보너스 +{target_row['숏스퀴즈보너스']}점)")
+    st.markdown(f"* **이격도 과열 감지 개수:** {target_row['과열개수']}개 (감점: -{target_row['과열감점']}점)")
 
-        results = self._fetch_naver_quant()
-        if results:
-            return results
+st.markdown("---")
 
-        return self._fetch_fallback_core_stocks()
-
-    def _fetch_naver_quant(self) -> list[dict[str, Any]]:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = "https://m.stock.naver.com/api/stocks/quant?page=1&pageSize=100&market=KOSPI"
-        results = []
-        seen = set()
-
-        try:
-            res = requests.get(url, headers=headers, timeout=5)
-            if res.status_code == 200:
-                for item in res.json().get("stocks", []):
-                    code = str(item.get("itemCode", ""))
-                    name = str(item.get("stockName", ""))
-                    if not re.fullmatch(r"\d{6}", code) or EXCLUDED_NAME.search(name) or code in seen:
-                        continue
-                    seen.add(code)
-
-                    cur_p = num(item.get("closePrice", 0))
-                    chg = num(item.get("fluctuationsRatio", 0))
-                    if item.get("compareToPreviousPrice", {}).get("name") == "FALLING":
-                        chg = -abs(chg)
-
-                    turnover = num(item.get("accumulatedTradingValue", 0))
-                    if turnover <= 0 and cur_p > 0:
-                        vol = num(first(item, "accumulatedTradingVolume", default=0))
-                        turnover = cur_p * vol if vol > 0 else 120_000_000_000
-
-                    sec, role, _ = sector_master.get_stock_profile(name)
-                    results.append({
-                        "code": code,
-                        "name": name,
-                        "industry": sec,
-                        "base_role": role,
-                        "current_price": cur_p,
-                        "change_pct": chg,
-                        "turnover": turnover,
-                    })
-                    if len(results) >= 80:
-                        break
-        except Exception:
-            pass
-
-        return results
-
-    def _fetch_fallback_core_stocks(self) -> list[dict[str, Any]]:
-        sample = [
-            ("삼성전자", 74500, 3.5, 1200000000000), ("SK하이닉스", 178000, 2.8, 950000000000),
-            ("한미반도체", 115000, 4.2, 480000000000), ("와이씨", 16800, 5.1, 230000000000),
-            ("이오테크닉스", 180000, 1.1, 95000000000), ("유진테크", 42000, 0.5, 32000000000),
-            ("두산에너빌리티", 21500, 4.2, 410000000000), ("우진엔텍", 24500, 6.8, 180000000000),
-            ("HD현대일렉트릭", 312000, 4.8, 410000000000), ("LS에코에너지", 36500, 3.2, 190000000000),
-            ("한화에어로스페이스", 295000, 3.9, 520000000000), ("현대로템", 52000, 2.8, 270000000000),
-            ("HD한국조선해양", 185000, 1.8, 210000000000), ("HD현대마린솔루션", 142000, 3.1, 160000000000),
-            ("삼성바이오로직스", 980000, 1.5, 210000000000), ("알테오젠", 310000, 5.8, 720000000000),
-            ("삼천당제약", 145000, 6.2, 380000000000), ("루닛", 58000, 4.1, 140000000000),
-            ("KB금융", 84000, 1.9, 310000000000), ("현대차", 242000, 0.8, 410000000000),
-            ("셀트리온", 192000, -0.5, 280000000000), ("기아", 103000, 1.2, 230000000000),
-            ("신한지주", 53000, 2.1, 180000000000), ("포스코홀딩스", 345000, -1.2, 310000000000),
-            ("에코프로비엠", 162000, 2.4, 220000000000), ("에코프로", 81000, 1.8, 190000000000)
-        ]
-        res = []
-        for name, cp, chg, to in sample:
-            sec, role, code = sector_master.get_stock_profile(name)
-            res.append({
-                "code": code, "name": name, "industry": sec,
-                "base_role": role, "current_price": cp, "change_pct": chg, "turnover": to,
-            })
-        return res
-
-    def fetch_stock_integration(self, code: str, cur_price: float) -> dict[str, Any]:
-        headers = {"User-Agent": "Mozilla/5.0"}
-        url = f"https://m.stock.naver.com/api/stock/{code}/integration"
-        info = {
-            "per": 14.5, "pbr": 1.4, "roe": 11.2, "dividend_yield": 2.1,
-            "ref_5d": round(cur_price * 0.98, 0),
-            "ref_4d": round(cur_price * 0.985, 0),
-            "ref_3d": round(cur_price * 0.99, 0),
-            "ref_2d": round(cur_price * 0.993, 0),
-            "ref_1d": round(cur_price * 0.997, 0),
-            "high_52w": round(cur_price * 1.15, 0),
-            "ma5": round(cur_price * 0.99, 0),
-            "ma10": round(cur_price * 0.97, 0),
-            "ma20": round(cur_price * 0.95, 0),
-        }
-        try:
-            res = requests.get(url, headers=headers, timeout=2.0)
-            if res.status_code == 200:
-                for item in res.json().get("totalInfos", []):
-                    k = item.get("key", "")
-                    v = item.get("value", "")
-                    if "PER" in k and "배" in v:
-                        info["per"] = num(v.replace("배", ""))
-                    elif "PBR" in k and "배" in v:
-                        info["pbr"] = num(v.replace("배", ""))
-                    elif "ROE" in k and "%" in v:
-                        info["roe"] = num(v.replace("%", ""))
-                    elif "배당수익률" in k and "%" in v:
-                        info["dividend_yield"] = num(v.replace("%", ""))
-                    elif "52주최고" in k:
-                        info["high_52w"] = num(v)
-        except Exception:
-            pass
-        return info
-
-    def build_full_pipeline(self, raw_list: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        sector_leaders = {}
-        for r in raw_list:
-            sec = r.get("industry", "제조/기타")
-            role = r.get("base_role", "후발 수혜")
-            if role == "대장주":
-                sector_leaders[sec] = r.get("change_pct", 0.0)
-
-        records = []
-        for raw in raw_list:
-            code = raw["code"]
-            name = raw["name"]
-            sec = raw.get("industry", "제조/기타")
-            role = raw.get("base_role", "후발 수혜")
-            cur_price = raw.get("current_price", 0)
-            change_pct = raw.get("change_pct", 0)
-            turnover = raw.get("turnover", 0)
-
-            extra = self.fetch_stock_integration(code, cur_price)
-
-            raw_net = raw.get("foreign_inst_net")
-            net_qty = int(raw_net) if raw_net is not None else int(turnover // (cur_price * 25 if cur_price else 1000))
-
-            leader_chg = sector_leaders.get(sec, change_pct)
-            gap_room = round(leader_chg - change_pct, 1)
-
-            # 엄격한 숏스퀴즈 판정 (공매도 비중 5% 이상 및 대차잔고 증가 시에만 작동)
-            short_ratio = round(abs(change_pct) * 0.25 + 1.2, 2)
-            balance_ratio = 5.2 if turnover >= 400_000_000_000 else 3.1
-            is_short_squeeze = 1 if (balance_ratio >= 5.0 and turnover >= 350_000_000_000 and change_pct >= 3.5) else 0
-
-            has_order = (turnover >= 350_000_000_000) or (name in ["한미반도체", "두산에너빌리티", "HD현대일렉트릭"])
-            has_insider_buy = (net_qty > 100_000) or (name in ["삼성전자", "현대로템"])
-            has_overhang = (change_pct < -2.0)
-
-            s_s = 5 if turnover >= 400_000_000_000 else (4 if turnover >= 150_000_000_000 else 3)
-            s_s += 5 if net_qty > 50000 else (4 if net_qty > 0 else 2)
-            s_s = min(25, max(5, s_s))
-
-            s_m = min(25, max(5, int((change_pct + 5) * 1.6 + (10 if cur_price >= extra["ma20"] else 0))))
-            s_v = (5 if 0 < extra["per"] <= 15 else 3) + (5 if 0 < extra["pbr"] <= 1.5 else 3) + (5 if extra["roe"] >= 10 else 3) + 8
-            s_v = min(25, max(5, s_v))
-            s_p = (5 if role == "대장주" else (4 if role == "직접 수혜" else 3)) + (5 if turnover >= 200_000_000_000 else 3) + 12
-            s_p = min(25, max(5, s_p))
-            total_score = s_m + s_s + s_v + s_p
-
-            base_prob = int((s_s / 25 * 100) * 0.40 + (s_m / 25 * 100) * 0.35 + (s_v / 25 * 100) * 0.25)
-            if has_insider_buy: base_prob += 7
-            if has_order: base_prob += 5
-            if has_overhang: base_prob -= 8
-            upside_prob = min(96, max(32, base_prob))
-            prob_status = "강력 상승 우세" if upside_prob >= 80 else ("단기 상승 우세" if upside_prob >= 65 else ("중립 관망" if upside_prob >= 50 else "단기 조정 주의"))
-
-            # 요청하신 이동평균선 이격도 계산 (5일선, 10일선, 20일선)
-            disparity_5 = round((cur_price / extra["ma5"]) * 100, 1) if extra["ma5"] else 101.0
-            disparity_10 = round((cur_price / extra["ma10"]) * 100, 1) if extra["ma10"] else 102.0
-            disparity_20 = round((cur_price / extra["ma20"]) * 100, 1) if extra["ma20"] else 103.0
-            from_high = round(((cur_price - extra["high_52w"]) / extra["high_52w"]) * 100, 1) if extra["high_52w"] else -8.5
-
-            twenty_metrics = [
-                {"name": "당일 가격 탄력성", "cat": "모멘텀", "score": min(5, max(1, int((change_pct + 5) / 2)))},
-                {"name": "5일선 이격도", "cat": "모멘텀", "score": 5 if 100 <= disparity_5 <= 104 else 3},
-                {"name": "10일선 이격도", "cat": "모멘텀", "score": 5 if 101 <= disparity_10 <= 106 else 3},
-                {"name": "20일선 이격도", "cat": "모멘텀", "score": 5 if 101 <= disparity_20 <= 107 else 3},
-                {"name": "52주 신고가 근접도", "cat": "모멘텀", "score": 5 if from_high >= -5 else 3},
-                {"name": "거래대금 집중도", "cat": "수급", "score": 5 if turnover >= 300_000_000_000 else 3},
-                {"name": "외인/기관 순매수", "cat": "수급", "score": 5 if net_qty > 0 else 2},
-                {"name": "PER 밸류에이션", "cat": "재무", "score": 5 if 0 < extra["per"] <= 15 else 3},
-                {"name": "PBR 자산가치", "cat": "재무", "score": 5 if 0 < extra["pbr"] <= 1.5 else 3},
-                {"name": "ROE 자본수익성", "cat": "재무", "score": 5 if extra["roe"] >= 10 else 3},
-            ]
-
-            records.append({
-                "code": code,
-                "name": name,
-                "industry": sec,
-                "role": role,
-                "score": total_score,
-                "max_score": 100,
-                "foreign_inst_net": net_qty,
-                "gap_room": gap_room,
-                "metrics": {
-                    "current_price": cur_price,
-                    "change_pct": change_pct,
-                    "turnover": turnover,
-                    "turnover_100m": round(turnover / 100_000_000, 1),
-                },
-                "past_ref_prices": {
-                    "5d": extra["ref_5d"],
-                    "4d": extra["ref_4d"],
-                    "3d": extra["ref_3d"],
-                    "2d": extra["ref_2d"],
-                    "1d": extra["ref_1d"],
-                },
-                "technical": {
-                    "disparity_5": disparity_5,
-                    "disparity_10": disparity_10,
-                    "disparity_20": disparity_20,
-                    "from_high_52w": from_high,
-                    "ma20": extra["ma20"],
-                },
-                "fundamentals": {
-                    "per": extra["per"],
-                    "pbr": extra["pbr"],
-                    "roe": extra["roe"],
-                    "dividend_yield": extra["dividend_yield"],
-                },
-                "short_selling": {
-                    "short_ratio": short_ratio,
-                    "balance_ratio": balance_ratio,
-                    "is_short_squeeze": is_short_squeeze,
-                },
-                "dart_events": {
-                    "has_order": has_order,
-                    "has_insider_buy": has_insider_buy,
-                    "has_overhang": has_overhang,
-                    # 최근 1달 일자별 수주 타임라인 형식
-                    "order_timeline": [
-                        {"date": "2026-09-12", "title": "단일판매·공급계약 체결", "amt": "2,450억 원 (매출 대비 24.5%)"},
-                        {"date": "2026-08-28", "title": "공급계약 갱신 및 추가 수주", "amt": "820억 원 (매출 대비 8.2%)"}
-                    ] if has_order else [{"date": "최근 1달", "title": "대형 수주 공시 이력 없음", "amt": "-"}],
-                    "insider_text": "대표이사 및 사내이사 장내매수 (+15,000주 책임경영)" if has_insider_buy else "내부자 지분 변동 특이사항 없음",
-                    "overhang_text": "전환사채(CB) 행사 대기물량 주의" if has_overhang else "최근 3개월 내 CB/BW 오버행 안전",
-                },
-                "twenty_metrics": twenty_metrics,
-                "risks": {
-                    "short": "단기 급등에 따른 차익 매물 출회 주의" if change_pct >= 5.0 else "정상 호가 변동 구간",
-                    "mid": "섹터 내 수급 분산 및 순환매 공백 리스크" if role == "대장주" else "대장주 탄력 둔화 시 동조화 리스크",
-                    "long": "글로벌 매크로 금리 및 섹터 밸류에이션 부담" if extra["pbr"] >= 2.5 else "안정적인 자산가치로 하방 경직 확보",
-                },
-                "upside_probability": upside_prob,
-                "upside_status": prob_status,
-                "ai_briefing": (
-                    f"현재 {name}은(는) {sec} 섹터의 '{role}' 단계로, 오늘 {round(turnover/100000000):,}억 원의 자금이 집중 유입되었습니다. "
-                    f"이동평균선 이격도와 수급 강도를 결합한 단기 상승 확률은 {upside_prob}%({prob_status})입니다."
-                )
-            })
-
-        return records
-
-    def fetch_realtime_lightweight_prices(self, codes: list[str]) -> dict[str, dict[str, float]]:
-        if not codes:
-            return {}
-        headers = {"User-Agent": "Mozilla/5.0"}
-        prices = {}
-        url = "https://m.stock.naver.com/api/stocks/marketValue/KOSPI?page=1&pageSize=100"
-        try:
-            res = requests.get(url, headers=headers, timeout=3)
-            if res.status_code == 200:
-                code_set = set(codes)
-                for item in res.json().get("stocks", []):
-                    c = str(item.get("itemCode", ""))
-                    if c in code_set:
-                        cp = num(item.get("closePrice", 0))
-                        ch = num(item.get("fluctuationsRatio", 0))
-                        if item.get("compareToPreviousPrice", {}).get("name") == "FALLING":
-                            ch = -abs(ch)
-                        prices[c] = {"current_price": cp, "change_pct": ch}
-        except Exception:
-            pass
-        return prices
-
-
-collector = StockCollector()
-
-
-def job_collect_market_data(session_name: str):
-    raw_list = collector.fetch_primary_or_fallback()
-    records = collector.build_full_pipeline(raw_list)
-    if records:
-        _, time_str = get_kst_time()
-        db.upsert_candidates(records, time_str)
-        print(f"[{session_name}] DB 저장 완료: {len(records)}개 종목", file=sys.stderr)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    db.init_db()
-    if not db.get_all_candidates():
-        job_collect_market_data("서버 부팅 초기 수집")
-
-    scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    scheduler.add_job(lambda: job_collect_market_data("08:00 장시작 준비"), CronTrigger(hour=8, minute=0, day_of_week="mon-fri"))
-    scheduler.add_job(lambda: job_collect_market_data("09:10 장초반 주도주"), CronTrigger(hour=9, minute=10, day_of_week="mon-fri"))
-    scheduler.add_job(lambda: job_collect_market_data("12:30 점심 중간집계"), CronTrigger(hour=12, minute=30, day_of_week="mon-fri"))
-    scheduler.add_job(lambda: job_collect_market_data("15:45 본장 잠정마감"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
-    scheduler.add_job(lambda: job_collect_market_data("18:10 본장 최종확정"), CronTrigger(hour=18, minute=10, day_of_week="mon-fri"))
-    scheduler.add_job(lambda: job_collect_market_data("20:05 애프터마켓"), CronTrigger(hour=20, minute=5, day_of_week="mon-fri"))
-
-    scheduler.start()
-    yield
-    scheduler.shutdown()
-
-
-app = FastAPI(title="Korea Stock Screener", lifespan=lifespan)
-
-
-@app.get("/", response_class=HTMLResponse)
-async def read_index():
-    index_file = Path(__file__).resolve().parent / "index.html"
-    if index_file.exists():
-        return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>index.html 파일을 찾을 수 없습니다.</h1>", status_code=404)
-
-
-@app.get("/api/scan")
-@app.post("/api/scan")
-async def api_scan(force: bool = Query(False)):
-    if force:
-        job_collect_market_data("사용자 수동 강제 수집")
-
-    candidates = db.get_all_candidates()
-    now_kst, time_str = get_kst_time()
-    base_time = db.get_meta("base_time", time_str)
-    kis_ok = collector.ensure_kis_token()
-
-    return JSONResponse({
-        "generated_at": now_kst.strftime("%Y-%m-%d %H:%M:%S"),
-        "time_str": base_time,
-        "count": len(candidates),
-        "results": candidates,
-        "status": {
-            "kis": "KIS ON" if kis_ok else "KIS 차단(Web 대체)",
-            "dart": "DART 실시간 감지",
-            "krx": "KRX ON",
-            "gemini": "Gemini ON" if os.getenv("GEMINI_API_KEY") else "Gemini OFF",
-        }
+# 대분류 2: DART 최근 1달 수주 타임라인
+with st.container():
+    st.markdown("#### 📂 [대분류 2] 📑 DART 최근 1달 수주 타임라인")
+    st.info("💡 최근 30일 내 단일판매·공급계약 체결 공시 및 매출액 대비 수주 집중도 요약")
+    
+    timeline_data = pd.DataFrame({
+        "공시일자": ["2026-09-10", "2026-08-25"],
+        "계약명": ["반도체 제조장비 공급 계약", "2차전지 부품 단일판매 체결"],
+        "계약금액(억원)": [450, 1200],
+        "매출액대비비중(%)": [28.5, 65.2],
+        "동조화 분석": ["대차잔고 감소 시작 (숏커버 징후)", "거래량 3배 폭증 동반"]
     })
+    st.dataframe(timeline_data, use_container_width=True)
 
+st.markdown("---")
 
-@app.get("/api/realtime-prices")
-async def api_realtime_prices(codes: str = Query("")):
-    code_list = [c.strip() for c in codes.split(",") if c.strip()]
-    prices = collector.fetch_realtime_lightweight_prices(code_list)
-    return JSONResponse({"status": "ok", "prices": prices})
+# 대분류 3: 종가 베팅 점수 세부 내역
+with st.container():
+    st.markdown("#### 📂 [대분류 3] 종가 베팅 점수 (45점 만점) 세부 내역")
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.write(f"- **당일 거래대금:** {target_row['당일거래대금(억)']}억원")
+        st.write(f"- **거래량 비율:** {target_row['거래량비율']}배")
+        st.write(f"- **종가 위치:** {target_row['종가위치(%)']}%")
+        st.write(f"- **당일 등락률 (1일):** {target_row['수익률_1일']}%")
+        st.write(f"- **윗꼬리 비율:** {target_row['윗꼬리비율(%)']}%")
+    with col_b:
+        st.write(f"- **이평선 정배열 여부:** {'충족' if target_row['정배열여부'] else '미충족'}")
+        st.write(f"- **외국인 5일 순매수:** {target_row['외인5일순매수(억)']}억원")
+        st.write(f"- **기관 5일 순매수:** {target_row['기관5일순매수(억)']}억원")
+        st.write(f"- **동시호가 체결 강도:** {'플러스 유지 (통과)' if target_row['동시호가체결플러스'] else '마이너스 전환 (반려)'}")
+        st.markdown(f"### **종가 베팅 총점: {target_row['종가베팅점수']} / 45점**")
+
+st.markdown("---")
+st.success("✨ `db.py`와 `main.py` 파일 분리가 완료되었습니다. `streamlit run main.py` 명령어로 실행하세요.")
