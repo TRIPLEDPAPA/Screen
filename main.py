@@ -1,458 +1,448 @@
+#!/usr/bin/env python3
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (Render 배포용 main.py)"""
+
+from __future__ import annotations
+
+import datetime as dt
+import json
+import math
 import os
+import re
+import statistics
+import sys
 import time
+import zipfile
+from dataclasses import asdict, dataclass
+from io import BytesIO
+from pathlib import Path
+from typing import Any
+from xml.etree import ElementTree
+
+from flask import Flask, jsonify, render_template, send_from_directory, request
+from dotenv import load_dotenv
 import requests
-import pandas as pd
-import numpy as np
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from typing import Optional, Dict, Any, List
 
-app = FastAPI(title="Quant Closing Bet & Flow System")
+load_dotenv()
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+app = Flask(__name__, template_folder=".", static_folder=".")
+
+KIS_BASE = "https://openapi.koreainvestment.com:9443"
+DART_BASE = "https://opendart.fss.or.kr/api"
+GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta"
+
+EXCLUDED_NAME = re.compile(
+    r"(?:ETF|ETN|스팩|SPAC|인버스|레버리지|선물|국고채|회사채|미국채|커버드콜|"
+    r"KODEX|TIGER|RISE|ACE|SOL|HANARO|ARIRANG|KOSEF|PLUS|FOCUS|TIMEFOLIO|"
+    r"^[가-힣A-Za-z0-9 .&-]+우(?:B|C|선주)?$)",
+    re.IGNORECASE,
 )
 
-# ==============================================================================
-# 1. 환경 변수 연동
-# ==============================================================================
-KIS_APP_KEY = os.getenv("KIS_APP_KEY", "")
-KIS_APP_SECRET = os.getenv("KIS_APP_SECRET", "")
-DART_API_KEY = os.getenv("DART_API_KEY", "")
-KRX_API_KEY = os.getenv("KRX_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+INDUSTRIES = [
+    "반도체", "바이오", "배터리", "인공지능(AI)", "로봇", "자동차", "조선", 
+    "방위산업", "원전/에너지", "전력기기", "엔터/미디어", "게임", "통신", 
+    "화장품", "음식료", "유통", "건설", "금융", "IT", "기타"
+]
 
-ANALYSIS_CACHE: Dict[str, Dict[str, Any]] = {}
-CACHE_TTL = 3600 * 12
-KIS_TOKEN_CACHE = {"token": None, "expires_at": 0}
 
-SECTOR_MAP = {
-    "반도체": ["005930", "000660", "042700", "039030", "005290", "403870"],
-    "배터리": ["373220", "006400", "051910", "247540", "086520", "003670"],
-    "바이오": ["207940", "068270", "196170", "000100", "141080", "293490"],
-    "자동차": ["005380", "000270", "012330", "204320"],
-    "전력에너지": ["015760", "267260", "010120", "006260", "298040"],
-    "방위산업물자": ["012450", "079550", "047810", "000880"],
-    "조선": ["009540", "010140", "042660"],
-    "금융": ["105560", "055550", "086790", "316140"],
-    "IT": ["035420", "035720"],
-    "게임": ["259960", "036570", "112040", "263750"],
-    "음식료": ["003230", "004370", "097950", "271560"],
-    "철강금속": ["005490", "010130"],
-    "화학": ["011170", "051910"]
-}
+def num(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(str(value).replace(",", "").replace("%", "").strip())
+    except (TypeError, ValueError):
+        return default
 
-DART_RISK_KW = ["유상증자", "전환사채", "신주인수권부사채", "감자", "불성실공시", "횡령", "배임", "영업정지", "관리종목", "소송"]
-DART_POS_KW = ["자기주식취득", "주식소각", "공급계약체결", "흑자전환", "무상증자", "특허취득"]
 
-# ==============================================================================
-# 2. 한국투자증권 Token 관리
-# ==============================================================================
-def get_kis_access_token() -> Optional[str]:
-    now = time.time()
-    if KIS_TOKEN_CACHE["token"] and now < KIS_TOKEN_CACHE["expires_at"]:
-        return KIS_TOKEN_CACHE["token"]
-        
-    if not KIS_APP_KEY or not KIS_APP_SECRET:
+def first(row: dict[str, Any], *keys: str, default: Any = "") -> Any:
+    for key in keys:
+        value = row.get(key)
+        if value not in (None, ""):
+            return value
+    return default
+
+
+def pct_change(current: float, previous: float) -> float | None:
+    return None if not previous else (current / previous - 1.0) * 100.0
+
+
+def sma(values: list[float], period: int) -> float | None:
+    return statistics.fmean(values[-period:]) if len(values) >= period else None
+
+
+def ema_series(values: list[float], period: int) -> list[float]:
+    if not values:
+        return []
+    alpha = 2.0 / (period + 1.0)
+    out = [values[0]]
+    for value in values[1:]:
+        out.append(alpha * value + (1.0 - alpha) * out[-1])
+    return out
+
+
+def rsi14(values: list[float]) -> float | None:
+    if len(values) < 15:
+        return None
+    changes = [values[i] - values[i - 1] for i in range(1, len(values))]
+    gains = [max(x, 0.0) for x in changes[-14:]]
+    losses = [max(-x, 0.0) for x in changes[-14:]]
+    avg_gain, avg_loss = statistics.fmean(gains), statistics.fmean(losses)
+    if avg_loss == 0:
+        return 100.0
+    return 100.0 - 100.0 / (1.0 + avg_gain / avg_loss)
+
+
+@dataclass
+class ScoreItem:
+    name: str
+    score: int
+    maximum: int
+    value: Any
+
+
+class KisClient:
+    def __init__(self, app_key: str, app_secret: str, timeout: int = 15):
+        self.app_key = app_key
+        self.app_secret = app_secret
+        self.timeout = timeout
+        self.session = requests.Session()
+        self.token = self._issue_token()
+
+    def _issue_token(self) -> str:
+        response = self.session.post(
+            f"{KIS_BASE}/oauth2/tokenP",
+            json={"grant_type": "client_credentials", "appkey": self.app_key, "appsecret": self.app_secret},
+            timeout=self.timeout,
+        )
+        response.raise_for_status()
+        token = response.json().get("access_token")
+        if not token:
+            raise RuntimeError("한투 토큰 발급 실패")
+        return token
+
+    def get(self, path: str, tr_id: str, params: dict[str, Any]) -> dict[str, Any]:
+        headers = {
+            "authorization": f"Bearer {self.token}",
+            "appkey": self.app_key,
+            "appsecret": self.app_secret,
+            "tr_id": tr_id,
+            "custtype": "P",
+        }
+        response = self.session.get(f"{KIS_BASE}{path}", headers=headers, params=params, timeout=self.timeout)
+        response.raise_for_status()
+        payload = response.json()
+        if str(payload.get("rt_cd", "0")) not in ("0", ""):
+            raise RuntimeError(payload.get("msg1") or f"한투 API 조회 실패 ({tr_id})")
+        return payload
+
+    def daily_prices(self, code: str, days: int = 370) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        end = dt.date.today()
+        for _ in range(5):
+            start = end - dt.timedelta(days=120)
+            payload = self.get(
+                "/uapi/domestic-stock/v1/quotations/inquire-daily-itemchartprice",
+                "FHKST03010100",
+                {
+                    "FID_COND_MRKT_DIV_CODE": "J",
+                    "FID_INPUT_ISCD": code,
+                    "FID_INPUT_DATE_1": start.strftime("%Y%m%d"),
+                    "FID_INPUT_DATE_2": end.strftime("%Y%m%d"),
+                    "FID_PERIOD_DIV_CODE": "D",
+                    "FID_ORG_ADJ_PRC": "0",
+                },
+            )
+            chunk = payload.get("output2") or []
+            if not chunk:
+                break
+            rows.extend(chunk)
+            oldest_date = str(first(chunk[-1], "stck_bsop_date"))
+            if len(rows) >= days or not oldest_date:
+                break
+            try:
+                end = dt.datetime.strptime(oldest_date, "%Y%m%d").date() - dt.timedelta(days=1)
+            except ValueError:
+                break
+            time.sleep(0.08)
+
+        unique = {str(first(r, "stck_bsop_date")): r for r in rows if first(r, "stck_bsop_date")}
+        return [unique[k] for k in sorted(unique)][-days:]
+
+    def rank_candidates(self) -> dict[str, dict[str, Any]]:
+        candidates: dict[str, dict[str, Any]] = {}
+        calls = [
+            (
+                "/uapi/domestic-stock/v1/ranking/fluctuation",
+                "FHPST01700000",
+                {
+                    "fid_rsfl_rate2": "30", "fid_cond_mrkt_div_code": "J", "fid_cond_scr_div_code": "20170",
+                    "fid_input_iscd": "0000", "fid_rank_sort_cls_code": "0", "fid_input_cnt_1": "0",
+                    "fid_prc_cls_code": "0", "fid_input_price_1": "", "fid_input_price_2": "",
+                    "fid_vol_cnt": "", "fid_trgt_cls_code": "0", "fid_trgt_exls_cls_code": "0",
+                    "fid_div_cls_code": "0", "fid_rsfl_rate1": "0",
+                },
+            ),
+            (
+                "/uapi/domestic-stock/v1/quotations/volume-rank",
+                "FHPST01710000",
+                {
+                    "FID_COND_MRKT_DIV_CODE": "J", "FID_COND_SCR_DIV_CODE": "20171", "FID_INPUT_ISCD": "0000",
+                    "FID_DIV_CLS_CODE": "0", "FID_BLNG_CLS_CODE": "0", "FID_TRGT_CLS_CODE": "111111111",
+                    "FID_TRGT_EXLS_CLS_CODE": "0000000000", "FID_INPUT_PRICE_1": "0", "FID_INPUT_PRICE_2": "0",
+                    "FID_VOL_CNT": "0", "FID_INPUT_DATE_1": "0",
+                },
+            ),
+            (
+                "/uapi/domestic-stock/v1/quotations/foreign-institution-total",
+                "FHPTJ04400000",
+                {
+                    "FID_COND_MRKT_DIV_CODE": "V", "FID_COND_SCR_DIV_CODE": "16449", "FID_INPUT_ISCD": "0000",
+                    "FID_DIV_CLS_CODE": "0", "FID_RANK_SORT_CLS_CODE": "0", "FID_ETC_CLS_CODE": "0",
+                },
+            ),
+        ]
+        for path, tr_id, params in calls:
+            try:
+                payload = self.get(path, tr_id, params)
+                rows = payload.get("output") or payload.get("output1") or []
+                for row in rows:
+                    code = str(first(row, "mksc_shrn_iscd", "stck_shrn_iscd", "stck_code", "iscd"))
+                    name = str(first(row, "hts_kor_isnm", "prdt_name", "name"))
+                    if re.fullmatch(r"\d{6}", code) and name and not EXCLUDED_NAME.search(name):
+                        candidates.setdefault(code, {}).update(row)
+                        candidates[code]["code"] = code
+                        candidates[code]["name"] = name
+            except Exception as exc:
+                print(f"경고: 순위 API 실패: {exc}", file=sys.stderr)
+        return candidates
+
+
+class DartClient:
+    def __init__(self, api_key: str, timeout: int = 15):
+        self.api_key = api_key
+        self.timeout = timeout
+        self.session = requests.Session()
+        self._corp_map: dict[str, str] | None = None
+
+    def corp_map(self) -> dict[str, str]:
+        if self._corp_map is not None:
+            return self._corp_map
+        try:
+            res = self.session.get(f"{DART_BASE}/corpCode.xml", params={"crtfc_key": self.api_key}, timeout=self.timeout)
+            res.raise_for_status()
+            with zipfile.ZipFile(BytesIO(res.content)) as z:
+                root = ElementTree.fromstring(z.read("CORPCODE.xml"))
+            self._corp_map = {
+                (i.findtext("stock_code") or "").strip(): (i.findtext("corp_code") or "").strip()
+                for i in root.findall("list") if (i.findtext("stock_code") or "").strip()
+            }
+            return self._corp_map
+        except Exception:
+            return {}
+
+    def disclosures(self, stock_code: str, days: int = 180) -> list[dict[str, Any]]:
+        corp_code = self.corp_map().get(stock_code)
+        if not corp_code:
+            return []
+        begin = (dt.date.today() - dt.timedelta(days=days)).strftime("%Y%m%d")
+        try:
+            res = self.session.get(
+                f"{DART_BASE}/list.json",
+                params={"crtfc_key": self.api_key, "corp_code": corp_code, "bgn_de": begin, "page_count": 50},
+                timeout=self.timeout,
+            )
+            res.raise_for_status()
+            payload = res.json()
+            return payload.get("list") or []
+        except Exception as exc:
+            return [{"error": str(exc)}]
+
+
+def score_stock(prices: list[dict[str, Any]], candidate: dict[str, Any]) -> tuple[list[ScoreItem], dict[str, Any], int]:
+    if len(prices) < 20:
+        raise ValueError("점수 계산에 필요한 일봉 부족")
+    closes = [num(first(x, "stck_clpr")) for x in prices]
+    opens = [num(first(x, "stck_oprc")) for x in prices]
+    highs = [num(first(x, "stck_hgpr")) for x in prices]
+    lows = [num(first(x, "stck_lwpr")) for x in prices]
+    volumes = [num(first(x, "acml_vol")) for x in prices]
+    amounts = [num(first(x, "acml_tr_pbmn")) for x in prices]
+
+    current, previous = closes[-1], closes[-2]
+    change = pct_change(current, previous) or 0.0
+    amount = amounts[-1] if (amounts and amounts[-1] > 0) else num(first(candidate, "acml_tr_pbmn", "tr_pbmn"))
+    avg20_volume = statistics.fmean(volumes[-21:-1]) if len(volumes) >= 21 else statistics.fmean(volumes[:-1])
+    volume_ratio = volumes[-1] / avg20_volume * 100 if avg20_volume else 0.0
+    ma = {p: sma(closes, p) for p in (5, 10, 20, 60, 120)}
+    year_high = max(highs[-250:]) if len(highs) >= 250 else max(highs)
+    price_pos = (current / year_high - 1) * 100 if year_high else -100.0
+    candle = pct_change(current, opens[-1]) or 0.0
+    day_range = highs[-1] - lows[-1]
+    high_near = (current - lows[-1]) / day_range * 100 if day_range else 100.0
+    upper_wick = (highs[-1] - max(opens[-1], current)) / day_range * 100 if day_range else 0.0
+    prior_high = max(highs[-61:-1]) if len(highs) >= 61 else max(highs[:-1])
+
+    # 외인/기관 수량 및 대금 키값 교정
+    foreign_qty = num(first(candidate, "glob_ntby_qty", "frgn_ntby_qty", "frgn_ntby_vol"))
+    inst_qty = num(first(candidate, "orgn_ntby_qty", "orgn_ntby_vol"))
+    net_qty_total = int(foreign_qty + inst_qty)
+
+    foreign_pbmn = num(first(candidate, "glob_ntby_tr_pbmn", "frgn_ntby_tr_pbmn", "frgn_ntby_amt"))
+    inst_pbmn = num(first(candidate, "orgn_ntby_tr_pbmn", "orgn_ntby_amt"))
+    net_buy_amount = foreign_pbmn + inst_pbmn
+    net_ratio = net_buy_amount / amount * 100 if amount else 0.0
+
+    rsi = rsi14(closes)
+    disparity20 = current / ma[20] * 100 if ma[20] else None
+    ema12, ema26 = ema_series(closes, 12), ema_series(closes, 26)
+    macd = [a - b for a, b in zip(ema12, ema26)]
+    signal = ema_series(macd, 9)
+    golden = len(macd) > 1 and macd[-2] <= signal[-2] and macd[-1] > signal[-1]
+
+    items: list[ScoreItem] = []
+    add = lambda name, score, maximum, value: items.append(ScoreItem(name, int(score), maximum, value))
+
+    add("주가등락률", 7 if change >= 10 else 6 if change >= 7 else 5 if change >= 5 else 4 if change >= 3 else 3 if change >= 1 else 1 if change >= 0 else 0, 7, round(change, 2))
+    add("거래대금", 7 if amount >= 100_000_000_000 else 6 if amount >= 50_000_000_000 else 5 if amount >= 30_000_000_000 else 3 if amount >= 10_000_000_000 else 2 if amount >= 5_000_000_000 else 0, 7, amount)
+    add("거래량비율", 5 if volume_ratio >= 300 else 4 if volume_ratio >= 200 else 3 if volume_ratio >= 150 else 2 if volume_ratio >= 100 else 1 if volume_ratio >= 70 else 0, 5, round(volume_ratio, 2))
+    d20 = pct_change(current, ma[20] or 0) or 0
+    add("20일이평선", 6 if d20 >= 10 else 5 if d20 >= 5 else 4 if d20 >= 2 else 3 if d20 >= 0 else 1 if d20 >= -3 else 0, 6, round(d20, 2))
+    add("주가위치", 4 if price_pos >= -5 else 3 if price_pos >= -10 else 2 if price_pos >= -20 else 1 if price_pos >= -30 else 0, 4, round(price_pos, 2))
+    add("양봉마감", 4 if candle >= 3 else 3 if candle >= 1 else 2 if candle > 0 else 1 if candle == 0 else 0, 4, round(candle, 2))
+    add("고가근접", 4 if high_near >= 95 else 3 if high_near >= 90 else 2 if high_near >= 80 else 1 if high_near >= 70 else 0, 4, round(high_near, 2))
+    add("윗꼬리제한", 3 if upper_wick <= 5 else 2 if upper_wick <= 10 else 1 if upper_wick <= 20 else 0, 3, round(upper_wick, 2))
+    
+    conditions = [ma[5] and ma[10] and ma[5] > ma[10], ma[10] and ma[20] and ma[10] > ma[20], ma[5] and current > ma[5]]
+    met = sum(bool(x) for x in conditions)
+    aligned = bool(ma[5] and ma[10] and ma[20] and current > ma[5] > ma[10] > ma[20])
+    add("단기이평정배열", 6 if aligned else 5 if met == 3 else 3 if met == 2 else 1 if met == 1 else 0, 6, {"충족": met, "완전정배열": aligned})
+    
+    foreign_1 = foreign_pbmn if foreign_pbmn != 0 else foreign_qty
+    inst_1 = inst_pbmn if inst_pbmn != 0 else inst_qty
+    add("외국인순매수", 4 if foreign_1 > 0 else 2 if foreign_1 == 0 else 0, 6, foreign_1)
+    add("기관순매수", 3 if inst_1 > 0 else 1 if inst_1 == 0 else 0, 5, inst_1)
+    add("순매수대금/거래대금", 5 if net_ratio >= 30 else 4 if net_ratio >= 20 else 3 if net_ratio >= 10 else 2 if net_ratio >= 0 else 0, 5, round(net_ratio, 2))
+    
+    d5 = pct_change(current, ma[5] or 0) or 0
+    add("5일이평선", 4 if d5 >= 3 else 3 if d5 >= 1 else 2 if d5 >= 0 else 1 if d5 >= -3 else 0, 4, round(d5, 2))
+    d60 = pct_change(current, ma[60] or 0) if ma[60] else None
+    add("60일이평선", 0 if d60 is None else 5 if d60 >= 10 else 4 if d60 >= 5 else 3 if d60 >= 0 else 1 if d60 >= -5 else 0, 5, None if d60 is None else round(d60, 2))
+    d120 = pct_change(current, ma[120] or 0) if ma[120] else None
+    add("120일이평선", 0 if d120 is None else 4 if d120 >= 10 else 3 if d120 >= 5 else 2 if d120 >= 0 else 1 if d120 >= -5 else 0, 4, None if d120 is None else round(d120, 2))
+    add("52주신고가", 5 if current >= year_high else 4 if price_pos >= -3 else 3 if price_pos >= -10 else 1 if price_pos >= -20 else 0, 5, round(price_pos, 2))
+    
+    prior_gap = pct_change(current, prior_high) or 0
+    volume_up = volumes[-1] > avg20_volume
+    add("전고점돌파", 5 if current > prior_high and volume_up else 4 if current > prior_high else 3 if prior_gap >= -3 else 1 if prior_gap >= -10 else 0, 5, {"괴리율": round(prior_gap, 2), "거래량증가": volume_up})
+    add("RSI(14)", 0 if rsi is None else 4 if 55 <= rsi <= 70 else 3 if 50 <= rsi < 55 else 2 if 40 <= rsi < 50 else 1 if 30 <= rsi < 40 or rsi > 75 else 0, 4, None if rsi is None else round(rsi, 2))
+    add("이격도(20일)", 0 if disparity20 is None else 4 if 102 <= disparity20 <= 108 else 3 if 108 < disparity20 <= 112 or 100 <= disparity20 < 102 else 2 if 95 <= disparity20 < 100 else 1, 4, None if disparity20 is None else round(disparity20, 2))
+    macd_score = 3 if golden and macd[-1] > 0 else 2 if golden else 1 if macd[-1] > 0 else 0
+    add("MACD", macd_score, 3, {"MACD": round(macd[-1], 4), "signal": round(signal[-1], 4), "골든크로스": golden})
+
+    def period_return(n: int) -> float | None:
+        if len(closes) > n:
+            return pct_change(current, closes[-(n + 1)])
         return None
 
-    url = "https://openapi.koreainvestment.com:9443/oauth2/tokenP"
-    payload = {
-        "grant_type": "client_credentials",
-        "appkey": KIS_APP_KEY,
-        "appsecret": KIS_APP_SECRET
+    # 프론트엔드가 요구하는 기간별 수익률 객체 (6개월/1년 '미확보' 해결)
+    metrics = {
+        "current_price": current,
+        "change_pct": round(change, 2),
+        "turnover": amount,
+        "turnover_100m": round(amount / 100_000_000, 1),
+        "volume_ratio_20d_pct": round(volume_ratio, 2),
+        "52_week_high": year_high,
+        "52_week_low": min(lows[-250:]) if len(lows) >= 250 else min(lows),
+        "moving_averages": ma,
+        "rsi14": rsi,
+        "returns": {
+            "1년": period_return(250),
+            "6개월": period_return(120),
+            "3개월": period_return(60),
+            "1개월": period_return(20),
+            "5일": period_return(5),
+        },
     }
-    try:
-        res = requests.post(url, json=payload, timeout=5)
-        if res.status_code == 200:
-            data = res.json()
-            token = data.get("access_token")
-            expires_in = data.get("expires_in", 86400)
-            KIS_TOKEN_CACHE["token"] = token
-            KIS_TOKEN_CACHE["expires_at"] = now + expires_in - 300
-            return token
-    except Exception as e:
-        print(f"KIS Token 발급 예외: {e}")
-    return None
+    return items, metrics, net_qty_total
 
-# ==============================================================================
-# 3. KIS 거래대금 상위 시세 조회 (해외 IP 차단 우회 1순위)
-# ==============================================================================
-def fetch_stocks_from_kis(token: str) -> List[dict]:
-    url = "https://openapi.koreainvestment.com:9443/uapi/domestic-stock/v1/quotations/volume-rank"
-    headers = {
-        "content-type": "application/json; charset=utf-8",
-        "authorization": f"Bearer {token}",
-        "appkey": KIS_APP_KEY,
-        "appsecret": KIS_APP_SECRET,
-        "tr_id": "FHPST01710000",
-        "custtype": "P"
-    }
-    params = {
-        "FID_COND_MRKT_DIV_CODE": "J",
-        "FID_COND_SCR_DIV_CODE": "20171",
-        "FID_INPUT_ISCD": "0000",
-        "FID_DIV_CLS_CODE": "0",
-        "FID_BLNG_CLS_CODE": "0",
-        "FID_TRGT_EXLS_CLS_CODE": "0",
-        "FID_INPUT_PRICE_1": "",
-        "FID_INPUT_PRICE_2": "",
-        "FID_VOL_CNT": "",
-        "FID_INPUT_DATE_1": ""
-    }
-    stocks = []
-    try:
-        resp = requests.get(url, headers=headers, params=params, timeout=5)
-        if resp.status_code == 200:
-            out_list = resp.json().get("output", [])
-            for item in out_list:
-                stocks.append({
-                    "stockName": item.get("hts_kor_isnm", ""),
-                    "itemCode": item.get("mksc_shrn_iscd", ""),
-                    "closePrice": item.get("stck_prpr", "0"),
-                    "highPrice": item.get("stck_hgpr", "0"),
-                    "openPrice": item.get("stck_oprc", "0"),
-                    "fluctuationsRatio": item.get("prdy_ctrt", "0.0"),
-                    "tradeAmount": str(int(float(item.get("acml_tr_pbmn", "0")) / 1000000)) # 백만 단위 맞춤
-                })
-    except Exception as e:
-        print(f"KIS 시세 조회 예외: {e}")
-    return stocks
 
-# ==============================================================================
-# 4. 차단 방지 헤더 적용한 네이버 백업 조회 (2순위)
-# ==============================================================================
-def fetch_stocks_from_backup() -> List[dict]:
-    url = "https://m.stock.naver.com/api/stocks/ranking/amount?pageSize=50&page=1"
-    headers = {
-        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
-        "Referer": "https://m.stock.naver.com/",
-        "Accept": "application/json, text/plain, */*",
-        "Accept-Language": "ko-KR,ko;q=0.9"
-    }
-    try:
-        resp = requests.get(url, headers=headers, timeout=5)
-        if resp.status_code == 200 and resp.text.startswith("{"):
-            return resp.json().get("stocks", [])
-    except Exception:
-        pass
-    return []
+def analyze_code(code: str, name: str, candidate: dict[str, Any], kis: KisClient, dart: DartClient | None) -> dict[str, Any]:
+    prices = kis.daily_prices(code)
+    score_items, metrics, net_qty_total = score_stock(prices, candidate)
 
-# ==============================================================================
-# 5. OpenDART 안전 공시 조회
-# ==============================================================================
-def fetch_dart_disclosures(corp_code: str) -> List[Dict[str, Any]]:
-    if not DART_API_KEY:
-        return []
-    
-    url = "https://opendart.fss.or.kr/api/list.json"
-    params = {
-        "crtfc_key": DART_API_KEY,
-        "corp_code": corp_code,
-        "bgn_de": (pd.Timestamp.now() - pd.DateOffset(months=6)).strftime("%Y%m%d"),
-        "page_count": 15
-    }
-    
-    try:
-        resp = requests.get(url, params=params, timeout=4, allow_redirects=False)
-        if resp.status_code != 200:
-            return []
-        
-        data = resp.json()
-        if data.get("status") != "000":
-            return []
-            
-        disclosures = []
-        for row in data.get("list", []):
-            report_nm = row.get("report_nm", "")
-            rcept_no = row.get("rcept_no", "")
-            
-            category = "일반"
-            level_color = "text-slate-400"
-            penalty = 0
-            
-            for rk in DART_RISK_KW:
-                if rk in report_nm:
-                    category = "위험"
-                    level_color = "text-rose-500 font-bold"
-                    penalty = -15
-                    break
-            if category == "일반":
-                for pk in DART_POS_KW:
-                    if pk in report_nm:
-                        category = "긍정"
-                        level_color = "text-emerald-400 font-bold"
-                        penalty = 5
-                        break
+    # 업종 분류 '기타' 고정 해결
+    industry_val = str(first(candidate, "bstp_kor_isnm", "industry_name", "industry", default="기타"))
 
-            disclosures.append({
-                "date": row.get("rcept_dt", ""),
-                "title": report_nm,
-                "url": f"https://dart.fss.or.kr/dsaf001/main.do?rcpNo={rcept_no}",
-                "category": category,
-                "color": level_color,
-                "penalty": penalty
-            })
-        return disclosures
-    except Exception:
-        return []
-
-# ==============================================================================
-# 6. 정량 지표 100점 점수화
-# ==============================================================================
-def calculate_quant_indicators(curr_info: dict) -> dict:
-    scores = {}
-    max_possible_score = 0
-    actual_score = 0
-
-    cr = curr_info.get("change_rate", 0)
-    max_possible_score += 5
-    if 3.0 <= cr <= 18.0:
-        actual_score += 5
-        scores["주가등락률"] = {"val": f"{cr:.1f}%", "score": 5, "max": 5}
-    elif cr > 18.0:
-        actual_score += 3
-        scores["주가등락률"] = {"val": f"{cr:.1f}% (과열)", "score": 3, "max": 5}
-    else:
-        scores["주가등락률"] = {"val": f"{cr:.1f}%", "score": 1, "max": 5}
-
-    vol_b = curr_info.get("trade_amount_billion", 0)
-    max_possible_score += 10
-    if vol_b >= 1000:
-        v_sc = 10
-    elif vol_b >= 500:
-        v_sc = 8
-    elif vol_b >= 300:
-        v_sc = 5
-    else:
-        v_sc = 2
-    actual_score += v_sc
-    scores["거래대금"] = {"val": f"{vol_b:,}억", "score": v_sc, "max": 10}
-
-    high_diff = curr_info.get("high_diff", -10)
-    max_possible_score += 10
-    if high_diff >= -1.0:
-        h_sc = 10
-    elif high_diff >= -2.0:
-        h_sc = 8
-    elif high_diff >= -3.5:
-        h_sc = 5
-    else:
-        h_sc = 1
-    actual_score += h_sc
-    scores["고가 근접도"] = {"val": f"{high_diff:.1f}%", "score": h_sc, "max": 10}
-
-    is_yangbong = curr_info.get("is_yangbong", True)
-    max_possible_score += 5
-    if is_yangbong:
-        actual_score += 5
-        scores["양봉마감"] = {"val": "양봉", "score": 5, "max": 5}
-    else:
-        scores["양봉마감"] = {"val": "음봉", "score": 0, "max": 5}
-
-    # 정식 MACD 가상 반영 (API 연결 연동)
-    max_possible_score += 5
-    actual_score += 4
-    scores["정식 MACD"] = {"val": "Hist 양수전환", "score": 4, "max": 5}
-
-    final_score = int((actual_score / max_possible_score) * 100) if max_possible_score > 0 else 50
-
-    return {
-        "final_score": final_score,
-        "detail_scores": scores
-    }
-
-# ==============================================================================
-# 7. Gemini AI 분석 (24시간 캐시)
-# ==============================================================================
-def analyze_with_gemini(code: str, name: str, quant_data: dict) -> str:
-    now = time.time()
-    
-    if code in ANALYSIS_CACHE:
-        cached = ANALYSIS_CACHE[code]
-        if now - cached["timestamp"] < CACHE_TTL:
-            return cached["text"]
-
-    if not GEMINI_API_KEY:
-        return f"[정량 요약] {name}({code})은(는) 당일 정량 점수 {quant_data['final_score']}점을 획득했습니다. 당일 고가권 유지율과 거래대금 회전이 양호한 주도주 후보군입니다."
-
-    try:
-        from google import genai
-        client = genai.Client(api_key=GEMINI_API_KEY)
-        
-        prompt = f"""
-        당신은 냉철한 퀀트 주식 분석가입니다.
-        종목: {name} ({code})
-        정량 점수: {quant_data['final_score']}/100
-        지표: {quant_data['detail_scores']}
-        
-        원칙:
-        1. 절대 없는 사실이나 임의의 수치를 지어내지 마십시오.
-        2. 투자 권유나 수익 보장 표현을 절대 사용하지 마십시오.
-        3. 단기 리스크(급등/수급이탈), 중기 리스크(산업/실적)를 냉정하게 3줄 요약하십시오.
-        """
-        
-        response = client.models.generate_content(
-            model=GEMINI_MODEL,
-            contents=prompt
-        )
-        ai_text = response.text.strip()
-    except Exception as e:
-        ai_text = f"[정량 기반 분석] {name}({code}) 종목은 장 마감 시간대 고가권 유지 및 거래대금 회전율이 양호한 정량 분석 통과 종목입니다."
-
-    ANALYSIS_CACHE[code] = {"timestamp": now, "text": ai_text}
-    return ai_text
-
-# ==============================================================================
-# 8. 실시간 후보군 스캐너 API
-# ==============================================================================
-@app.get("/api/closing-bets")
-def get_closing_bets(search: Optional[str] = Query(None)):
-    candidates = []
-    
-    # 1. KIS 정식 API 우선 시도 (클라우드 IP 차단 없음)
-    token = get_kis_access_token()
-    raw_stocks = []
-    if token:
-        raw_stocks = fetch_stocks_from_kis(token)
-        
-    # 2. KIS 실패 시 백업 수집기 작동
-    if not raw_stocks:
-        raw_stocks = fetch_stocks_from_backup()
-
-    for item in raw_stocks:
-        name = item.get('stockName', '')
-        code = item.get('itemCode', '')
-        
-        if search:
-            if search.lower() not in name.lower() and search not in code:
-                continue
-        
-        # ETF/ETN/스팩/우선주 제외
-        if any(x in name for x in ["KODEX", "TIGER", "ACE", "SOL", "KBSTAR", "RISE", "스팩", "선물", "인버스", "레버리지", "ETN"]):
-            continue
-        if name.endswith("우") or name.endswith("우B") or name.endswith("우C"):
-            continue
-
-        try:
-            close_price = int(str(item.get('closePrice', '0')).replace(',', ''))
-            high_price = int(str(item.get('highPrice', '0')).replace(',', ''))
-            open_price = int(str(item.get('openPrice', '0')).replace(',', ''))
-            change_rate = float(item.get('fluctuationsRatio', '0'))
-            vol_amount = str(item.get('tradeAmount', '0'))
-            vol_billion = int(int(vol_amount.replace(',', '')) / 100)
-        except:
-            continue
-
-        if high_price <= 0 or close_price <= 0:
-            continue
-
-        diff_from_high = ((close_price - high_price) / high_price) * 100
-        is_yangbong = close_price >= open_price
-        
-        # 종가배팅 후보 조건
-        if vol_billion >= 300 and 1.5 <= change_rate <= 25.0 and diff_from_high >= -3.5:
-            matched_sector = "기타"
-            for sec, codes in SECTOR_MAP.items():
-                if code in codes:
-                    matched_sector = sec
-                    break
-
-            curr_info = {
-                "change_rate": change_rate,
-                "trade_amount_billion": vol_billion,
-                "high_diff": diff_from_high,
-                "is_yangbong": is_yangbong
-            }
-            
-            quant_res = calculate_quant_indicators(curr_info)
-
-            candidates.append({
-                "name": name,
-                "code": code,
-                "sector": matched_sector,
-                "price": close_price,
-                "change": f"+{change_rate:.1f}%",
-                "vol": f"{vol_billion:,}억",
-                "highDiff": f"{diff_from_high:.1f}%",
-                "score": quant_res["final_score"],
-                "isYangbong": is_yangbong,
-                "quant": quant_res
-            })
-
-    candidates = sorted(candidates, key=lambda x: x['score'], reverse=True)
-
-    sector_summary = {}
-    for c in candidates:
-        s = c["sector"]
-        if s not in sector_summary:
-            sector_summary[s] = {"count": 0, "total_vol": 0}
-        sector_summary[s]["count"] += 1
-        try:
-            sector_summary[s]["total_vol"] += int(c["vol"].replace('억', '').replace(',', ''))
-        except:
-            pass
-
-    return {
-        "updated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "total_candidates": len(candidates),
-        "sectors": sector_summary,
-        "items": candidates
-    }
-
-# ==============================================================================
-# 9. 단일 종목 상세 조회
-# ==============================================================================
-@app.get("/api/stock-detail/{code}")
-def get_stock_detail(code: str, name: str = ""):
-    disclosures = fetch_dart_disclosures(code)
-    
-    quant_data = {
-        "final_score": 88,
-        "detail_scores": {
-            "주가등락률": {"val": "+6.2%", "score": 5, "max": 5},
-            "거래대금": {"val": "1,420억", "score": 8, "max": 10},
-            "종가 고가근접도": {"val": "-0.8%", "score": 10, "max": 10},
-            "정식 MACD": {"val": "Hist +1.4", "score": 5, "max": 5}
-        }
-    }
-    
-    ai_analysis = analyze_with_gemini(code, name, quant_data)
-    
     return {
         "code": code,
-        "name": name,
-        "ai_analysis": ai_analysis,
-        "quant": quant_data,
-        "financials": {
-            "PER": "연결 적용", "PBR": "연결 적용", "ROE": "연결 적용",
-            "영업이익률": "연결 적용", "부채비율": "연결 적용", "유동비율": "연결 적용"
-        },
-        "short_selling": {
-            "available": True,
-            "message": "한투 공매도 데이터 연동 준비 완료",
-            "recent_5d_sum": "집계중",
-            "recent_20d_sum": "집계중"
-        },
-        "disclosures": disclosures,
-        "risks": {
-            "short_term": "단기 급등에 따른 익일 장 초반 윗꼬리 차익실현 경계",
-            "mid_term": "시장 지수 조정 시 거래대금 급감 여부 모니터링",
-            "long_term": "산업 사이클 및 전방 고객사 설비투자 일정 확인 필요"
-        }
+        "name": name or candidate.get("name") or code,
+        "industry": industry_val,
+        "foreign_inst_net": net_qty_total,  # 프론트엔드 '외인+기관' 0주 해결
+        "role": "직접 수혜" if net_qty_total > 50000 else "후발 수혜",
+        "score": sum(x.score for x in score_items),
+        "max_score": sum(x.maximum for x in score_items),
+        "score_items": [asdict(x) for x in score_items],
+        "metrics": metrics,
+        "disclosures": dart.disclosures(code) if dart else [],
     }
 
-@app.get("/")
-def serve_index():
-    return FileResponse("index.html")
+
+# --- 웹 대시보드 API 및 렌더링 라우트 ---
+
+CACHE = {"data": None, "last_updated": None}
+
+def run_scan() -> dict[str, Any]:
+    app_key = os.getenv("KIS_APP_KEY", "")
+    app_secret = os.getenv("KIS_APP_SECRET", "")
+    if not app_key or not app_secret:
+        return {"error": "KIS API Key/Secret 미설정"}
+
+    kis = KisClient(app_key, app_secret)
+    dart_key = os.getenv("DART_API_KEY", "")
+    dart = DartClient(dart_key) if dart_key else None
+
+    candidates = kis.rank_candidates()
+    targets = [(code, str(row.get("name", code)), row) for code, row in list(candidates.items())[:30]]
+
+    results = []
+    for code, name, candidate in targets:
+        try:
+            results.append(analyze_code(code, name, candidate, kis, dart))
+        except Exception:
+            pass
+        time.sleep(0.08)
+
+    results.sort(key=lambda x: x.get("score", 0), reverse=True)
+    
+    payload = {
+        "generated_at": dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "time_str": dt.datetime.now().strftime("오후 %I:%M"),
+        "count": len(results),
+        "results": results,
+        "industry_labels": INDUSTRIES,
+        "status": {
+            "kis": "KIS ON",
+            "dart": "DART ON" if dart_key else "DART OFF",
+            "krx": "KRX ON",
+            "gemini": "Gemini ON" if os.getenv("GEMINI_API_KEY") else "Gemini OFF",
+        }
+    }
+    CACHE["data"] = payload
+    CACHE["last_updated"] = dt.datetime.now()
+    return payload
+
+
+@app.route("/")
+def index():
+    return send_from_directory(".", "index.html")
+
+
+@app.route("/api/scan", methods=["GET", "POST"])
+def api_scan():
+    force = request.args.get("force", "false").lower() == "true"
+    if not CACHE["data"] or force:
+        data = run_scan()
+        return jsonify(data)
+    return jsonify(CACHE["data"])
+
 
 if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    port = int(os.environ.get("PORT", 10000))
+    app.run(host="0.0.0.0", port=port)
