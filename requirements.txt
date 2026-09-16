@@ -1,6 +1,4 @@
-fastapi
-uvicorn
-requests
-pandas
-numpy
-google-genai
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+requests>=2.31.0
+python-dotenv>=1.0.0
