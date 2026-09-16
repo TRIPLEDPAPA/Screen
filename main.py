@@ -99,25 +99,38 @@ class ScoreItem:
 
 
 class KisClient:
-    def __init__(self, app_key: str, app_secret: str, timeout: int = 15):
-        self.app_key = app_key
-        self.app_secret = app_secret
-        self.timeout = timeout
-        self.session = requests.Session()
-        self.token = self._issue_token()
-
     def _issue_token(self) -> str:
-        response = self.session.post(
-            f"{KIS_BASE}/oauth2/tokenP",
-            json={"grant_type": "client_credentials", "appkey": self.app_key, "appsecret": self.app_secret},
-            timeout=self.timeout,
-        )
-        response.raise_for_status()
-        token = response.json().get("access_token")
-        if not token:
-            raise RuntimeError("한투 접근 토큰 발급 실패")
-        return token
-
+        headers = {
+            "Content-Type": "application/json; charset=UTF-8",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        }
+        payload = {
+            "grant_type": "client_credentials",
+            "appkey": self.app_key.strip(),
+            "appsecret": self.app_secret.strip(),
+        }
+        
+        try:
+            response = self.session.post(
+                f"{KIS_BASE}/oauth2/tokenP",
+                headers=headers,
+                json=payload,
+                timeout=self.timeout,
+            )
+            response.raise_for_status()
+            data = response.json()
+            token = data.get("access_token")
+            if not token:
+                raise RuntimeError(f"토큰 발급 실패: {data}")
+            return token
+        except requests.exceptions.HTTPError as err:
+            err_msg = ""
+            try:
+                err_msg = response.json()
+            except Exception:
+                err_msg = response.text
+            raise RuntimeError(f"한투 403 인증 거절 (원인 상세): {err_msg} - [해외IP 차단 여부 또는 App Key/Secret을 확인하세요]") from err
+            
     def get(self, path: str, tr_id: str, params: dict[str, Any]) -> dict[str, Any]:
         headers = {
             "authorization": f"Bearer {self.token}",
