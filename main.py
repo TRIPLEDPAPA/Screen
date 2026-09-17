@@ -100,7 +100,6 @@ class StockCollector:
                 "twenty_metrics": tm, "ai_briefing": f"{name} 정밀 퀀트 분석 완료.", "upside_probability": 85
             })
 
-        # 2,500개 전 종목 확장 청크 생성
         for i in range(1, 2500):
             code_str = f"{i:06d}"
             ind = industries[i % len(industries)]
@@ -122,7 +121,6 @@ class StockCollector:
                 "twenty_metrics": tm, "ai_briefing": f"종목{i} 자동 스캔 완료.", "upside_probability": 75
             })
 
-        # 500개 단위 청크 벌크 적재
         chunk_size = 500
         for idx in range(0, len(mock_records), chunk_size):
             chunk = mock_records[idx:idx + chunk_size]
@@ -133,15 +131,11 @@ collector = StockCollector()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
-    
-    # 초기 데이터 적재
     if not db.get_all_candidates():
         threading.Thread(target=collector.run_full_scan, args=("초기 부팅 풀 스캔",), daemon=True).start()
 
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    # 새벽 3시 00분 전 종목 일괄 수집
     scheduler.add_job(lambda: collector.run_full_scan("새벽 정기 풀 스캔"), CronTrigger(hour=3, minute=0))
-    # 평일 오후 3시 45분 장 마감 정기 스캔
     scheduler.add_job(lambda: collector.run_full_scan("장마감 정기 스캔"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
     scheduler.start()
     yield
@@ -171,48 +165,38 @@ async def api_scan(force: bool = Query(False)):
     })
 
 @app.get("/api/disclosures")
-def get_disclosures(category: str = "전체", month_day: str = "", keyword: str = "", days: int = 0):
+def get_disclosures(category: str = "전체"):
     conn = db.get_connection()
     cursor = conn.cursor()
-    query = "SELECT date_md, time, category, title, tag, tag_color FROM disclosures WHERE 1=1"
-    params = []
-
-    if category != "전체":
-        query += " AND category = ?"
-        params.append(category)
-    if month_day:
-        query += " AND date_md = ?"
-        params.append(month_day)
-    if keyword:
-        query += " AND title LIKE ?"
-        params.append(f"%{keyword}%")
-    
-    query += " ORDER BY id DESC"
-    if days > 0:
-        query += " LIMIT ?"
-        params.append(days * 15)
-
-    cursor.execute(query, params)
+    if category == "전체":
+        cursor.execute("SELECT * FROM disclosures ORDER BY id DESC LIMIT 50")
+    else:
+        cursor.execute("SELECT * FROM disclosures WHERE category=? ORDER BY id DESC LIMIT 50", (category,))
     rows = cursor.fetchall()
     conn.close()
     return {"status": "success", "data": [dict(r) for r in rows]}
 
 @app.get("/api/calendar/economic")
-def get_economic_calendar(week: str = "9월 2주 - 9월 3주"):
+def get_economic_calendar(week: str = "9월 2주 (09.07 - 09.13)"):
     mock_calendar = {
-        "9월 1주 - 9월 2주": [
-            {"id": "c1", "category": "economic", "week_label": "9월 1주 - 9월 2주", "date": "09.03", "time": "21:30", "title": "미국 고용보고서 비농업", "country": "🇺🇸", "tag": "고용지표", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", "actual": "14.2만", "forecast": "16.5만", "source": "US BLS", "ai_summary": "고용 증가세 둔화 흐름 확인", "guide": {"title": "비농업 고용지표", "desc": "미국 노동 시장의 건전성을 보여주는 핵심 지표입니다."}}
+        "9월 1주 (09.01 - 09.06)": [
+            {"id": "c1", "category": "economic", "week_label": "9월 1주 (09.01 - 09.06)", "date": "09.03", "time": "21:30", "title": "미국 고용보고서 비농업", "country": "🇺🇸", "tag": "고용지표", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", "actual": "14.2만", "forecast": "16.5만", "source": "US BLS", "ai_summary": "고용 증가세 둔화 흐름 확인", "guide": {"title": "비농업 고용지표", "desc": "미국 노동 시장 건전성 지표"}}
         ],
-        "9월 2주 - 9월 3주": [
-            {"id": "eco_1", "category": "economic", "week_label": "9월 2주 - 9월 3주", "date": "09.17", "time": "03:00", "title": "미국 기준금리 결정(상단)", "country": "🇺🇸", "tag": "금리 동결 및 인하", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve", "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", "guide": {"title": "미국 기준금리", "desc": "연방공개시장위원회(FOMC)에서 결정되는 기준금리로 글로벌 자금 흐름에 절대적인 영향을 미칩니다."}},
-            {"id": "eco_2", "category": "economic", "week_label": "9월 2주 - 9월 3주", "date": "09.17", "time": "21:30", "title": "미국 소매판매", "country": "🇺🇸", "tag": "소비지표", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50", "actual": "0.4%", "forecast": "0.3%", "source": "US Census Bureau", "ai_summary": "소비자들의 지출 여력이 예상보다 양호한 것으로 나타났습니다.", "guide": {"title": "미국 소매판매", "desc": "미국 경제의 70%를 차지하는 소비의 건전성을 측정합니다."}}
+        "9월 2주 (09.07 - 09.13)": [
+            {"id": "c2", "category": "economic", "week_label": "9월 2주 (09.07 - 09.13)", "date": "09.10", "time": "21:30", "title": "미국 소비자물가지수(CPI)", "country": "🇺🇸", "tag": "물가지표", "tag_color": "text-purple-400 bg-purple-950/50 border-purple-800/50", "actual": "2.5%", "forecast": "2.6%", "source": "US BLS", "ai_summary": "인플레이션 압력이 완화되는 모습을 보였습니다.", "guide": {"title": "미국 CPI", "desc": "소비자 물가 변동을 측정하는 핵심 인플레이션 지표입니다."}}
         ],
-        "9월 3주 - 9월 4주": [
-            {"id": "c3", "category": "economic", "week_label": "9월 3주 - 9월 4주", "date": "09.25", "time": "21:30", "title": "미국 2분기 GDP 확정치", "country": "🇺🇸", "tag": "성장률 지표", "tag_color": "text-amber-400 bg-amber-950/50 border-amber-800/50", "actual": "-", "forecast": "3.0%", "source": "US BEA", "ai_summary": "미국 경제 성장 모멘텀 점검 중요 일정", "guide": {"title": "GDP 확정치", "desc": "국가 경제 전체의 최종 생산 성과를 확정 발표하는 지표입니다."}}
+        "9월 3주 (09.14 - 09.20)": [
+            {"id": "eco_1", "category": "economic", "week_label": "9월 3주 (09.14 - 09.20)", "date": "09.17", "time": "03:00", "title": "미국 기준금리 결정(상단)", "country": "🇺🇸", "tag": "금리 결정", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve", "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", "guide": {"title": "미국 기준금리", "desc": "연방공개시장위원회(FOMC)에서 결정되는 기준금리"}}
+        ],
+        "9월 4주 (09.21 - 09.27)": [
+            {"id": "c4", "category": "economic", "week_label": "9월 4주 (09.21 - 09.27)", "date": "09.25", "time": "21:30", "title": "미국 2분기 GDP 확정치", "country": "🇺🇸", "tag": "성장률", "tag_color": "text-amber-400 bg-amber-950/50 border-amber-800/50", "actual": "-", "forecast": "3.0%", "source": "US BEA", "ai_summary": "미국 경제 성장 모멘텀 점검 중요 일정", "guide": {"title": "GDP 확정치", "desc": "국가 경제 최종 생산 성과 발표"}}
+        ],
+        "9월 5주 (09.28 - 09.30)": [
+            {"id": "c5", "category": "economic", "week_label": "9월 5주 (09.28 - 09.30)", "date": "09.30", "time": "23:00", "title": "미국 9월 소비자신뢰지수", "country": "🇺🇸", "tag": "심리지표", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50", "actual": "-", "forecast": "101.5", "source": "Conference Board", "ai_summary": "소비자들의 경제 신뢰도 점검", "guide": {"title": "소비자신뢰지수", "desc": "소비자들의 경기 체감 심리 지표"}}
         ]
     }
     return {"status": "success", "data": mock_calendar.get(week, []), "week": week}
 
 @app.get("/api/calendar/earnings")
-def get_earnings_calendar(week: str = "9월 2주 - 9월 3주"):
+def get_earnings_calendar(week: str = "9월 2주 (09.07 - 09.13)"):
     return {"status": "success", "data": [], "week": week}
