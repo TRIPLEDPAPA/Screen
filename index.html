@@ -7,8 +7,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #0b1320; color: #cbd5e1; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        .card { background-color: #111a2e; border: 1px solid #1e293b; transition: all 0.2s; }
-        .card:hover { border-color: #334155; transform: translateY(-2px); }
+        .card { background-color: #111a2e; border: 1px solid #1e293b; }
+        .card-link { transition: all 0.2s; display: block; text-decoration: none; color: inherit; }
+        .card-link:hover { border-color: #06b6d4; background-color: #162238; transform: translateY(-2px); }
         .table-container { background-color: #111a2e; border: 1px solid #1e293b; }
         th { background-color: #0d1527; color: #64748b; font-weight: 600; font-size: 0.82rem; white-space: nowrap; }
         td { border-bottom: 1px solid #1e293b; font-size: 0.88rem; white-space: nowrap; }
@@ -17,8 +18,6 @@
         .badge-leader { background-color: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 9999px; padding: 3px 10px; font-size: 0.75rem; font-weight: 700; }
         .btn-tab { background-color: #132238; color: #94a3b8; border-radius: 9999px; padding: 4px 14px; font-size: 0.8rem; transition: all 0.2s; }
         .btn-tab.active { background-color: #0d9488; color: #ffffff; font-weight: 600; }
-        .btn-detail { background-color: #00bcd4; color: #042f2e; font-weight: 600; border-radius: 4px; padding: 4px 12px; font-size: 0.8rem; }
-        .industry-card-active { border: 1px solid #06b6d4 !important; background-color: #162a4a !important; }
     </style>
 </head>
 <body class="min-h-screen flex flex-col">
@@ -44,105 +43,148 @@
     <!-- 메인 컨텐츠 영역 -->
     <main class="max-w-7xl mx-auto px-4 py-6 flex-grow w-full space-y-6">
 
-        <!-- [ 홈 탭 ]: 카드형 야간/거시 시세 위젯 + 수급 요약 및 스크리너 -->
+        <!-- [ 홈 탭 ] -->
         <section id="tab-home" class="tab-content space-y-6">
-            <div class="space-y-2">
-                <div class="flex justify-between items-center px-1">
-                    <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                        <span>🌙 야간 시세 및 주요 지표</span>
-                        <span class="text-xs font-normal text-slate-400">24시간 거래 · 1분 갱신 LIVE</span>
-                    </h2>
+
+            <!-- 📊 주요지표 섹션 -->
+            <div class="card p-4 rounded-xl">
+                <div class="text-xs font-bold text-cyan-400 mb-3 flex items-center gap-1.5">
+                    <span>📊 주요지표 (매크로 & 글로벌 자산)</span>
                 </div>
-                <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                    
-                    <!-- 코스피200 선물 (한경 연결) -->
-                    <a href="https://markets.hankyung.com/indices/kospi-future" target="_blank" class="card p-4 rounded-xl flex flex-col justify-between group">
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-bold text-white text-sm group-hover:text-cyan-400 transition">코스피200 선물</span>
-                                <span class="bg-rose-500/20 text-rose-400 text-xs px-2 py-0.5 rounded font-semibold">▲ +0.5%</span>
-                            </div>
-                            <div class="text-xl font-black text-white tracking-tight mb-1">360.5 <span class="text-xs font-normal text-slate-400">pt</span></div>
-                        </div>
-                        <div class="mt-3 pt-2 border-t border-slate-800 text-[11px] text-cyan-400 flex items-center justify-between">
-                            <span>시세 제공: 한경컨센서스 ↗</span>
-                        </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2.5 text-center">
+                    <a href="https://www.google.com/finance/beta/quote/USD-KRW?sa=X&sqi=2&ved=2ahUKEwjmyN-P3vWWAxX_klYBHSV-HXgQmY0JegQIEBAn" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">💵 환율 (USD)</div>
+                        <div class="text-xs font-bold text-white">미국 달러 / 원</div>
                     </a>
-
-                    <!-- 삼성전자 야간 -->
-                    <a href="https://www.gate.io/" target="_blank" class="card p-4 rounded-xl flex flex-col justify-between group">
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-bold text-white text-sm group-hover:text-cyan-400 transition">삼성전자 (야간)</span>
-                                <span class="bg-rose-500/20 text-rose-400 text-xs px-2 py-0.5 rounded font-semibold">▼ -0.33%</span>
-                            </div>
-                            <div class="text-xl font-black text-white tracking-tight mb-1">254,039 <span class="text-xs font-normal text-slate-400">원</span></div>
-                            <div class="text-xs text-slate-400">야간 선물 추정가</div>
-                        </div>
-                        <div class="mt-3 pt-2 border-t border-slate-800 text-[11px] text-cyan-400 flex items-center justify-between">
-                            <span>시세 제공: Gate.io ↗</span>
-                        </div>
+                    <a href="https://kr.investing.com/indices/korea-200-futures" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">📈 KRW 선물</div>
+                        <div class="text-xs font-bold text-white">코스피 200선물</div>
                     </a>
-
-                    <!-- SK하이닉스 야간 -->
-                    <a href="https://www.gate.io/" target="_blank" class="card p-4 rounded-xl flex flex-col justify-between group">
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-bold text-white text-sm group-hover:text-cyan-400 transition">SK하이닉스 (야간)</span>
-                                <span class="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded font-semibold">▲ +0.25%</span>
-                            </div>
-                            <div class="text-xl font-black text-white tracking-tight mb-1">1,751,840 <span class="text-xs font-normal text-slate-400">원</span></div>
-                            <div class="text-xs text-slate-400">야간 선물 추정가</div>
-                        </div>
-                        <div class="mt-3 pt-2 border-t border-slate-800 text-[11px] text-cyan-400 flex items-center justify-between">
-                            <span>시세 제공: Gate.io ↗</span>
-                        </div>
+                    <a href="https://kr.investing.com/indices/kospi" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🇰🇷 국내 지수</div>
+                        <div class="text-xs font-bold text-white">코스피 지수</div>
                     </a>
-
-                    <!-- WTI 유가 -->
-                    <a href="https://www.investing.com/commodities/crude-oil" target="_blank" class="card p-4 rounded-xl flex flex-col justify-between group">
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-bold text-white text-sm group-hover:text-cyan-400 transition">WTI 유가</span>
-                                <span class="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded font-semibold">▲ +1.1%</span>
-                            </div>
-                            <div class="text-xl font-black text-white tracking-tight mb-1">$74.2 <span class="text-xs font-normal text-slate-400">USD</span></div>
-                        </div>
-                        <div class="mt-3 pt-2 border-t border-slate-800 text-[11px] text-cyan-400 flex items-center justify-between">
-                            <span>원자재 실시간 시세 ↗</span>
-                        </div>
+                    <a href="https://kr.investing.com/indices/kosdaq" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🇰🇷 국내 지수</div>
+                        <div class="text-xs font-bold text-white">코스닥 지수</div>
                     </a>
-
-                    <!-- 비트코인 -->
-                    <a href="https://www.gate.io/" target="_blank" class="card p-4 rounded-xl flex flex-col justify-between group">
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-bold text-white text-sm group-hover:text-cyan-400 transition">비트코인 (BTC)</span>
-                                <span class="bg-emerald-500/20 text-emerald-400 text-xs px-2 py-0.5 rounded font-semibold">▲ +0.8%</span>
-                            </div>
-                            <div class="text-xl font-black text-white tracking-tight mb-1">105,408,967 <span class="text-xs font-normal text-slate-400">원</span></div>
-                            <div class="text-xs text-slate-400">원화 환산가</div>
-                        </div>
-                        <div class="mt-3 pt-2 border-t border-slate-800 text-[11px] text-cyan-400 flex items-center justify-between">
-                            <span>시세 제공: Gate.io ↗</span>
-                        </div>
+                    <a href="https://kr.investing.com/indices/us-spx-500" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🇺🇸 미국 지수</div>
+                        <div class="text-xs font-bold text-white">S&P 500 (SPX)</div>
                     </a>
-
-                    <!-- 공포·탐욕 지수 -->
-                    <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" class="card p-4 rounded-xl flex flex-col justify-between group">
-                        <div>
-                            <div class="flex justify-between items-center mb-2">
-                                <span class="font-bold text-white text-sm group-hover:text-cyan-400 transition">공포·탐욕 지수</span>
-                                <span class="bg-amber-500/20 text-amber-400 text-xs px-2 py-0.5 rounded font-semibold">중립</span>
-                            </div>
-                            <div class="text-xl font-black text-amber-400 tracking-tight mb-1">50 <span class="text-xs font-normal text-slate-400">/ 100</span></div>
-                            <div class="text-xs text-slate-400">시장 심리 지표</div>
-                        </div>
-                        <div class="mt-3 pt-2 border-t border-slate-800 text-[11px] text-cyan-400 flex items-center justify-between">
-                            <span>지수 제공: alternative.me ↗</span>
-                        </div>
+                    <a href="https://kr.investing.com/indices/us-30" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🇺🇸 미국 지수</div>
+                        <div class="text-xs font-bold text-white">다우존스 (DJI)</div>
                     </a>
+                    <a href="https://kr.investing.com/indices/nasdaq-composite" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🇺🇸 미국 지수</div>
+                        <div class="text-xs font-bold text-white">나스닥종합 (IXIC)</div>
+                    </a>
+                    <a href="https://kr.investing.com/commodities/crude-oil" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🛢️ 원자재</div>
+                        <div class="text-xs font-bold text-white">WTI유 선물</div>
+                    </a>
+                    <a href="https://kr.investing.com/commodities/brent-oil" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🛢️ 원자재</div>
+                        <div class="text-xs font-bold text-white">브렌트유 선물</div>
+                    </a>
+                    <a href="https://kr.investing.com/commodities/copper" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">⛏️ 원자재</div>
+                        <div class="text-xs font-bold text-white">구리 선물</div>
+                    </a>
+                    <a href="https://kr.investing.com/commodities/us-corn" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🌽 원자재</div>
+                        <div class="text-xs font-bold text-white">미국 옥수수</div>
+                    </a>
+                    <a href="https://www.upbit.com/exchange?code=CRIX.UPBIT.KRW-BTC" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🪙 가상자산</div>
+                        <div class="text-xs font-bold text-white">비트코인 (BTC)</div>
+                    </a>
+                    <a href="https://www.upbit.com/exchange?code=CRIX.UPBIT.KRW-ETH" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🪙 가상자산</div>
+                        <div class="text-xs font-bold text-white">이더리움 (ETH)</div>
+                    </a>
+                    <a href="https://www.upbit.com/exchange?code=CRIX.UPBIT.KRW-XRP" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">🪙 가상자산</div>
+                        <div class="text-xs font-bold text-white">엑스알피 (리플)</div>
+                    </a>
+                </div>
+            </div>
 
+            <!-- 🌙 야간 시세 및 심리 지표 섹션 -->
+            <div class="card p-4 rounded-xl">
+                <div class="text-xs font-bold text-amber-400 mb-3 flex items-center gap-1.5">
+                    <span>🌙 야간 시세 및 심리 지표</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 text-center">
+                    <a href="https://www.gate.com/futures/USDT/SAMSUNG_USDT" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
+                        <div class="h-8 flex items-center justify-center mb-1.5">
+                            <svg viewBox="0 0 130 28" class="h-6 w-auto">
+                                <text x="2" y="21" font-family="Arial, sans-serif" font-weight="900" font-size="19" fill="#2563eb" letter-spacing="0.5">SAMSUNG</text>
+                            </svg>
+                        </div>
+                        <div class="text-[11px] font-bold text-white">삼성전자 야간</div>
+                    </a>
+                    <a href="https://www.gate.com/futures/USDT/SKHYNIX_USDT" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
+                        <div class="h-8 flex items-center justify-center mb-1.5">
+                            <svg viewBox="0 0 130 28" class="h-6 w-auto">
+                                <text x="2" y="21" font-family="Arial, sans-serif" font-weight="900" font-size="18" fill="#e11d48">SK</text>
+                                <text x="30" y="21" font-family="Arial, sans-serif" font-weight="700" font-size="15" fill="#f97316">hynix</text>
+                            </svg>
+                        </div>
+                        <div class="text-[11px] font-bold text-white">하이닉스 야간</div>
+                    </a>
+                    <a href="https://www.gate.com/futures/USDT/HYUNDAI_USDT" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
+                        <div class="h-8 flex items-center justify-center mb-1.5">
+                            <svg viewBox="0 0 120 28" class="h-6 w-auto">
+                                <ellipse cx="16" cy="14" rx="14" ry="9" fill="none" stroke="#38bdf8" stroke-width="2"/>
+                                <path d="M9 10 L13 18 M23 10 L19 18 M11 14 L21 14" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
+                                <text x="36" y="20" font-family="Arial, sans-serif" font-weight="900" font-size="14" fill="#38bdf8" letter-spacing="0.5">HYUNDAI</text>
+                            </svg>
+                        </div>
+                        <div class="text-[11px] font-bold text-white">현대차 야간</div>
+                    </a>
+                    <a href="https://www.gate.com/futures/USDT/SAMSUNGEM_USDT" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
+                        <div class="h-8 flex items-center justify-center mb-1.5">
+                            <svg viewBox="0 0 100 28" class="h-6 w-auto">
+                                <text x="2" y="21" font-family="sans-serif" font-weight="800" font-size="16" fill="#3b82f6">삼성전기</text>
+                            </svg>
+                        </div>
+                        <div class="text-[11px] font-bold text-white">삼성전기 야간</div>
+                    </a>
+                    <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
+                        <div class="w-8 h-8 rounded-full bg-amber-900/40 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-xs mb-1.5 shadow-sm">😨</div>
+                        <div class="text-[11px] font-bold text-white">암호화폐 탐욕</div>
+                    </a>
+                    <a href="https://fastjusik.com/feargreed" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
+                        <div class="w-8 h-8 rounded-full bg-emerald-900/40 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs mb-1.5 shadow-sm">📊</div>
+                        <div class="text-[11px] font-bold text-white">코스피 탐욕</div>
+                    </a>
+                </div>
+            </div>
+
+            <!-- 🇺🇸 미국 국채 금리 섹션 (데이터 연동 반영) -->
+            <div class="card p-4 rounded-xl">
+                <div class="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-1.5">
+                    <span>미국 국채 금리</span>
+                </div>
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
+                    <a href="https://datacenter.hankyung.com/rates-bonds" target="_blank" class="card card-link p-3 rounded-lg">
+                        <div class="text-[10px] text-gray-400 mb-1">미국 국채 2년</div>
+                        <div class="text-sm font-black text-white mt-1" id="bond-2y">-- %</div>
+                    </a>
+                    <a href="https://datacenter.hankyung.com/rates-bonds" target="_blank" class="card card-link p-3 rounded-lg">
+                        <div class="text-[10px] text-gray-400 mb-1">미국 국채 5년</div>
+                        <div class="text-sm font-black text-white mt-1" id="bond-5y">-- %</div>
+                    </a>
+                    <a href="https://datacenter.hankyung.com/rates-bonds" target="_blank" class="card card-link p-3 rounded-lg">
+                        <div class="text-[10px] text-gray-400 mb-1">미국 국채 10년</div>
+                        <div class="text-sm font-black text-white mt-1" id="bond-10y">-- %</div>
+                    </a>
+                    <a href="https://datacenter.hankyung.com/rates-bonds" target="_blank" class="card card-link p-3 rounded-lg">
+                        <div class="text-[10px] text-gray-400 mb-1">미국 국채 30년</div>
+                        <div class="text-sm font-black text-white mt-1" id="bond-30y">-- %</div>
+                    </a>
                 </div>
             </div>
 
@@ -183,7 +225,7 @@
             </div>
         </section>
 
-        <!-- [ 공시 피드 탭 ]: Render 서버 프록시 연동 구조 -->
+        <!-- [ 공시 피드 탭 ] -->
         <section id="tab-feed" class="tab-content hidden space-y-4">
             <div class="card p-5 rounded-xl shadow-sm space-y-4">
                 <div class="flex justify-between items-center">
@@ -199,7 +241,7 @@
             </div>
         </section>
 
-        <!-- [ MONEY FLOW 탭 ]: 퀀트 스크리너 (탭 클릭 시 즉시 렌더링 최적화) -->
+        <!-- [ MONEY FLOW 탭 ] -->
         <section id="tab-money" class="tab-content hidden space-y-4">
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
                 <div class="card p-4 rounded-xl">
@@ -213,16 +255,12 @@
             </div>
             
             <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <!-- 좌측 산업별 TOP -->
                 <div class="lg:col-span-3 space-y-4">
                     <div class="card p-4 rounded-xl">
                         <h3 class="text-sm font-bold text-white mb-3">산업별 TOP</h3>
-                        <div id="industry-list" class="space-y-2">
-                            <!-- 동적 생성 -->
-                        </div>
+                        <div id="industry-list" class="space-y-2"></div>
                     </div>
                 </div>
-                <!-- 우측 메인 테이블 -->
                 <div class="lg:col-span-9">
                     <div class="table-container p-5 rounded-xl">
                         <div class="flex justify-between items-center mb-4">
@@ -240,9 +278,7 @@
                                         <th class="py-3 px-3 text-right">거래대금</th>
                                     </tr>
                                 </thead>
-                                <tbody id="money-tbody">
-                                    <!-- 동적 생성 -->
-                                </tbody>
+                                <tbody id="money-tbody"></tbody>
                             </table>
                         </div>
                     </div>
@@ -301,10 +337,7 @@
         </div>
     </div>
 
-    <!-- 스크립트: 탭 전환 최적화 및 머니플로 렌더링 연동 -->
     <script>
-        const RENDER_API_BASE = 'https://screen-2tgv.onrender.com';
-
         function switchTab(tabId) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
             document.querySelectorAll('.nav-btn').forEach(el => {
@@ -317,19 +350,32 @@
             activeNav.classList.remove('hover:text-cyan-400');
             activeNav.classList.add('text-cyan-400', 'font-semibold', 'border-b-2', 'border-cyan-400');
 
-            // MONEY FLOW 탭 클릭 시 즉시 스크리너 데이터 렌더링 실행
             if (tabId === 'money') {
                 loadMoneyFlowData();
             }
         }
 
-        // 멍이플로 샘플 데이터 및 렌더링 함수
         let rawStocks = [
             { code: '005930', name: '삼성전자', industry: '반도체', role: '대장주', score: 88, metrics: { current_price: 254039, turnover: 1250000000000 } },
             { code: '000660', name: 'SK하이닉스', industry: '반도체', role: '직접 수혜', score: 91, metrics: { current_price: 1751840, turnover: 980000000000 } },
             { code: '006400', name: '삼성SDI', industry: '배터리', role: '대장주', score: 84, metrics: { current_price: 420000, turnover: 450000000000 } }
         ];
         let selectedIndustry = null;
+
+        async function triggerScan(force = false) {
+            try {
+                const res = await fetch('/api/scan');
+                const data = await res.json();
+                if (data.bonds) {
+                    document.getElementById('bond-2y').innerText = `${data.bonds.yield_2y.toFixed(2)}%`;
+                    document.getElementById('bond-5y').innerText = `${data.bonds.yield_5y.toFixed(2)}%`;
+                    document.getElementById('bond-10y').innerText = `${data.bonds.yield_10y.toFixed(2)}%`;
+                    document.getElementById('bond-30y').innerText = `${data.bonds.yield_30y.toFixed(2)}%`;
+                }
+            } catch (err) {
+                console.error("국채 금리 데이터 로드 실패:", err);
+            }
+        }
 
         function loadMoneyFlowData() {
             renderIndustryList();
@@ -391,11 +437,8 @@
             renderMoneyTable();
         }
 
-        // Render 서버 프록시를 통한 DART 공시 피드 호출 함수
         async function loadDartFeed() {
             try {
-                // 실제 연동 시: const res = await fetch(`${RENDER_API_BASE}/api/dart-feed`);
-                // const data = await res.json();
                 console.log("Render 서버 프록시를 통해 DART 피드 요청 중...");
             } catch (e) {
                 console.error("DART 피드 로드 실패", e);
@@ -409,6 +452,10 @@
         function closeModal() {
             document.getElementById('summary-modal').classList.add('hidden');
         }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            triggerScan(false);
+        });
     </script>
 </body>
 </html>
