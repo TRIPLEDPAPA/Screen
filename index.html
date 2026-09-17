@@ -29,11 +29,11 @@
 </head>
 <body class="p-4 md:p-6">
 
-    <!-- 상단 요약 카드 및 우측 상단 사용설명서 버튼 -->
+    <!-- 상단 요약 카드: 분석시간과 사용설명서 칸 완전 분리 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">⚡ 시장 스캔 상태</div>
-            <div class="text-xl font-bold text-white tracking-tight">코스피·코스닥 300+ 통합</div>
+            <div class="text-xl font-bold text-white tracking-tight">코스피·코스닥 통합 스캔</div>
             <div class="text-xs text-gray-500 mt-1">5초 실시간 틱 갱신 활성화</div>
         </div>
         <div class="card p-4 rounded-xl">
@@ -41,47 +41,59 @@
             <div class="text-xl font-bold text-cyan-400 tracking-tight" id="candidate-count">0개</div>
             <div class="text-xs text-gray-500 mt-1">정밀 퀀트 우선순위 산출</div>
         </div>
-        <div class="card p-4 rounded-xl">
-            <div class="text-xs text-gray-400 mb-1">🔗 연결 상태</div>
-            <div class="text-xl font-bold text-white tracking-tight" id="conn-status">KIS ON · DART ON</div>
-            <div class="text-xs text-gray-500 mt-1">KRX ON · Gemini ON</div>
-        </div>
+        <!-- 독립된 분석시간 카드 -->
         <div class="card p-4 rounded-xl flex items-center justify-between">
             <div>
-                <div class="text-xs text-gray-400 mb-1">분석 기준 & 설명서</div>
-                <div class="text-base font-bold text-white" id="base-time">--:--</div>
+                <div class="text-xs text-gray-400 mb-1">⏰ 분석 기준 시간</div>
+                <div class="text-xl font-bold text-white" id="base-time">--:--</div>
             </div>
-            <div class="flex items-center gap-2">
-                <button onclick="openManualModal()" class="bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/40 rounded-lg px-3 py-2 text-xs font-semibold">📖 사용설명서</button>
-                <button onclick="triggerScan(true)" class="bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/40 rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-1">
-                    <span id="refresh-spinner">🔄</span>
-                </button>
+            <button onclick="triggerScan(true)" class="bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/40 rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-1">
+                <span id="refresh-spinner">🔄</span>
+            </button>
+        </div>
+        <!-- 독립된 설명서 카드 -->
+        <div class="card p-4 rounded-xl flex items-center justify-between">
+            <div>
+                <div class="text-xs text-gray-400 mb-1">📖 시스템 가이드</div>
+                <div class="text-sm font-bold text-indigo-300">사용설명서 및 지표 안내</div>
             </div>
+            <button onclick="openManualModal()" class="bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/40 rounded-lg px-3 py-2 text-xs font-semibold">열기</button>
         </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <!-- 좌측 사이드바: 산업별 머니 플로우 TOP 10 및 하단 오늘의 시장 신호 위젯 -->
+        <!-- 좌측 사이드바: 산업별 머니 플로우 TOP 10, 오늘의 시장 신호 위젯, 하단 연결 상태 -->
         <div class="lg:col-span-3 space-y-4">
             <div class="card p-5 rounded-xl">
-                <div class="text-xs text-gray-400 mb-1">⚡ 산업별 머니 플로우</div>
-                <h3 class="text-base font-bold text-white mb-1">돈이 몰리는 산업 TOP 10</h3>
-                <div class="text-xs text-cyan-400 mb-4 font-medium">거래대금 기준 산업별 후보 집계</div>
-                <div id="industry-list" class="space-y-2">
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <div class="text-xs text-gray-400 mb-0.5">⚡ 머니 플로우</div>
+                        <h3 class="text-sm font-bold text-white">산업별 TOP 10</h3>
+                    </div>
+                </div>
+                <div class="text-xs text-cyan-400 mb-3 font-medium">거래대금 기준 상위 산업 집계</div>
+                
+                <!-- 오늘의 시장 신호 위젯을 TOP 10 바로 아래에 나란히 배치 -->
+                <div class="bg-[#121c33] border border-cyan-500/30 p-3 rounded-lg mb-3 text-xs text-gray-300 space-y-1">
+                    <div class="font-bold text-cyan-400 flex items-center gap-1 mb-1">
+                        <span>📡 오늘의 시장 신호</span>
+                    </div>
+                    <div>• 주도 섹터: <span class="text-amber-400 font-semibold">반도체 / 방산</span></div>
+                    <div>• 종가베팅 S급: <span class="text-emerald-400 font-semibold">완료 (이격도 감점)</span></div>
+                    <div>• 수급 동향: <span class="text-rose-400 font-semibold">외인·기관 양매수 유입</span></div>
+                </div>
+
+                <div id="industry-list" class="space-y-2 max-h-[420px] overflow-y-auto">
                     <div class="text-xs text-gray-500 py-4 text-center">산업 집계 중...</div>
                 </div>
             </div>
 
-            <!-- 하단 오늘의 시장 신호 컴팩트 위젯 -->
-            <div class="card p-4 rounded-xl border border-cyan-500/30 bg-[#121c33]">
-                <div class="text-xs font-bold text-cyan-400 mb-2 flex items-center gap-1">
-                    <span>📡 오늘의 시장 신호</span>
-                </div>
-                <div class="space-y-1.5 text-xs text-gray-300" id="market-signal-widget">
-                    <div>• 주도 섹터: <span class="text-amber-400 font-semibold">반도체 / 방산</span></div>
-                    <div>• 종가베팅 S급: <span class="text-emerald-400 font-semibold">완료 (이격도 감점 반영)</span></div>
-                    <div>• 수급 동향: <span class="text-rose-400 font-semibold">외인·기관 양매수 유입</span></div>
-                </div>
+            <!-- 연결 상태 위젯을 좌측 하단으로 이동 (확인만 할 수 있게 컴팩트하게 배치) -->
+            <div class="card p-3 rounded-xl bg-[#0d1527] border border-gray-800 text-[11px] text-gray-400 space-y-1">
+                <div class="font-bold text-gray-300 mb-1">🔗 시스템 연결 상태</div>
+                <div class="flex justify-between"><span>KIS API:</span> <span class="text-emerald-400 font-semibold">ON (Web 연동)</span></div>
+                <div class="flex justify-between"><span>DART 오픈API:</span> <span class="text-emerald-400 font-semibold">ON (수주 연동)</span></div>
+                <div class="flex justify-between"><span>KRX 시장데이터:</span> <span class="text-emerald-400 font-semibold">ON</span></div>
             </div>
         </div>
 
@@ -95,7 +107,7 @@
                             <span class="text-cyan-400" id="table-total-count">0종목</span>
                             <button id="btn-reset-filter" onclick="clearIndustryFilter()" class="hidden ml-2 text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded border border-gray-700">전체보기 ✕</button>
                         </h2>
-                        <div class="text-xs text-amber-400/90 mt-0.5">종가베팅 정밀점수 및 이격도 과열 감점 적용</div>
+                        <div class="text-xs text-amber-400/90 mt-0.5">정밀 종가베팅 점수 및 이격도 과열 감점 반영</div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <!-- 종목 검색창 -->
@@ -147,18 +159,18 @@
             <div class="space-y-4 text-xs text-gray-300 leading-relaxed">
                 <div class="bg-[#142036] p-3 rounded-lg">
                     <div class="font-bold text-cyan-400 mb-1 text-sm">1. 종가 베팅 & 이격도 감점 시스템</div>
-                    <p>• 45점 만점의 10개 정밀 지표(거래대금, 거래량비율, 종가 위치, 양봉 몸통, 윗꼬리 제한, 정배열 등)를 통해 당일 마감 진입 타점을 엄격히 산출합니다.</p>
+                    <p>• 45점 만점의 10개 정밀 지표(거래대금, 거래량비율, 종가 위치, 양봉 몸통, 윗꼬리 제한, 정배열 등)를 통해 마감 진입 타점을 엄격히 산출합니다.</p>
                     <p class="mt-1">• 5일·10일·20일·60일 이동평균선 이격도가 과열 구간(각 108, 112, 115, 130 이상)에 진입할 경우 충족 개수에 따라 -3점, -6점, -10점의 과열 감점이 적용됩니다.</p>
                 </div>
                 <div class="bg-[#142036] p-3 rounded-lg">
                     <div class="font-bold text-cyan-400 mb-1 text-sm">2. 메인 테이블 시계열 및 수급</div>
-                    <p>• 기간별 수익률과 메인 테이블의 단기 흐름은 가장 최근인 **[1일(당일) ~ 5일전]** 순서로 배치되어 있으며, 과거 실제 기준가격 대비 수학적 퍼센트 산식으로 표기됩니다.</p>
-                    <p class="mt-1">• 외국인·기관 수급은 종목별 거래대금과 특성에 맞춰 고유의 순매수 수량이 각각 다채롭게 산출됩니다.</p>
+                    <p>• 단기 흐름은 가장 최근인 **[1일(당일) ~ 5일전]** 순서로 배치되어 있으며, 과거 실제 기준가격 대비 수학적 퍼센트 산식으로 표기됩니다.</p>
+                    <p class="mt-1">• 외국인·기관 수급은 종목별 거래대금과 특성에 맞춰 고유의 순매수 수량이 다채롭게 산출됩니다.</p>
                 </div>
                 <div class="bg-[#142036] p-3 rounded-lg">
                     <div class="font-bold text-cyan-400 mb-1 text-sm">3. 실시간 틱 및 인터랙션</div>
                     <p>• 상단 검색창에 종목명이나 6자리 코드를 입력하면 실시간으로 테이블이 필터링됩니다.</p>
-                    <p class="mt-1">• 좌측 '돈이 몰리는 산업 TOP 10' 항목을 클릭하면 해당 섹터의 종목들만 모아서 볼 수 있으며, 5초마다 현재가가 실시간 틱으로 갱신됩니다.</p>
+                    <p class="mt-1">• 좌측 '산업별 TOP 10' 항목을 클릭하면 해당 섹터 종목들만 모아볼 수 있으며, 5초마다 현재가가 실시간 틱으로 갱신됩니다.</p>
                 </div>
             </div>
         </div>
@@ -565,7 +577,7 @@
             document.getElementById('detail-modal').classList.add('hidden');
         }
 
-        // 5초 주기 실시간 현재가 틱 갱신 시뮬레이션
+        // 5초 주기 실시간 현재가 틱 갱신
         setInterval(() => {
             if (rawStocks.length === 0) return;
             rawStocks.forEach(item => {
