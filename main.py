@@ -4,9 +4,6 @@
 from __future__ import annotations
 
 import datetime as dt
-import os
-import re
-import sys
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -14,14 +11,10 @@ from typing import Any
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
-import requests
 
 import db
-
-load_dotenv()
 
 def get_kst_time() -> tuple[dt.datetime, str]:
     kst = dt.timezone(dt.timedelta(hours=9))
@@ -31,7 +24,7 @@ def get_kst_time() -> tuple[dt.datetime, str]:
     ampm = "오후" if now_kst.hour >= 12 else "오전"
     return now_kst, f"{ampm} {hour_12:02d}:{now_kst.minute:02d}"
 
-def calculate_twenty_precision_metrics(chg: float, turnover: float) -> tuple[int, list[dict[str, Any]]]:
+def calculate_precision_metrics(chg: float, turnover: float) -> tuple[int, list[dict[str, Any]]]:
     s1 = 7 if (3.0 <= chg <= 8.0) else (5 if (1.0 <= chg < 3.0 or 8.0 < chg <= 12.0) else (3 if (-2.0 <= chg < 1.0) else 1))
     s2 = 7 if turnover >= 100_000_000_000 else (5 if turnover >= 50_000_000_000 else (3 if turnover >= 10_000_000_000 else 1))
     score = s1 + s2 + 65
@@ -77,84 +70,85 @@ def fetch_all_market_indicators() -> dict[str, Any]:
         }
     }
 
-# 초기 DART 공시 데이터 (상/하위 계약 포함)
-INITIAL_DISCLOSURES = [
-    {"date_md": "09.18", "time": "20:00", "category": "주요공시", "title": "삼성전자 자기주식취득결정 (1조원 규모 신탁계약)", "sub_title": "신규 취득 결정 및 주가 환산 반영", "tag": "자사주매입", "tag_color": "text-cyan-400 bg-cyan-950/50 border-cyan-800/50"},
-    {"date_md": "09.18", "time": "18:34", "category": "실적·수주", "title": "엘앤에프 단일판매ㆍ공급계약체결 (2,400억 규모)", "sub_title": "하위 파트너사 협력 납품 부품 계약 포함", "tag": "수주", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50"},
-    {"date_md": "09.18", "time": "16:45", "category": "실적·수주", "title": "엘앤에프 하위 부품 공급 추가 서브 계약 (150억)", "sub_title": "본계약 연계 세부 납품 건", "tag": "하위계약", "tag_color": "text-emerald-300 bg-emerald-900/40 border-emerald-700/50"},
-    {"date_md": "09.17", "time": "16:15", "category": "주요공시", "title": "SK하이닉스 주식소각결정 (보통주 300만주)", "sub_title": "상장주식수 감소 확인 완료", "tag": "자사주소각", "tag_color": "text-purple-400 bg-purple-950/50 border-purple-800/50"},
-    {"date_md": "09.16", "time": "14:20", "category": "연금관련", "title": "현대차 지분변동공시 (국민연금공단 등)", "sub_title": "주요 주주 지분 변동 보고", "tag": "연금관련", "tag_color": "text-amber-400 bg-amber-950/50 border-amber-800/50"},
-    {"date_md": "09.15", "time": "11:10", "category": "실적·수주", "title": "한화에어로스페이스 방산 공급계약 체결 및 하위 납품", "sub_title": "대규모 해외 수주 및 협력사 연계", "tag": "수주", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50"},
-]
-
-INITIAL_CALENDAR = [
-    {
-        "id": "eco_1", "category": "economic", "date_md": "09.17", "time": "03:00",
-        "title": "미국 기준금리 결정(상단)", "country": "🇺🇸", "tag": "금리 동결 및 인하",
-        "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50",
-        "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve",
-        "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", "status": "COMPLETED"
-    },
-    {
-        "id": "eco_2", "category": "economic", "date_md": "09.25", "time": "21:30",
-        "title": "미국 2분기 GDP 확정치", "country": "🇺🇸", "tag": "성장률 지표",
-        "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50",
-        "actual": "-", "forecast": "3.0%", "source": "US BEA",
-        "ai_summary": "미국 경제 성장 모멘텀 점검 중요 일정", "status": "SCHEDULED"
-    }
-]
-
 class StockCollector:
-    def incremental_chunk_collection(self, session_name: str):
+    def run_full_scan(self, session_name: str = "새벽 일괄 수집"):
         _, time_str = get_kst_time()
-        # 삼성전자 수익률 정밀 매핑 (1년: 17.6, 6개월: 33.3, 3개월: 21.9, 1개월: 11.1, 20일: 11.1, 10일: 3.1, 5일: 6.4)
-        fallback_raw = [
-            ("005930", "삼성전자", "반도체", 74500, 1.2, 1200000000000, 17.6, 33.3, 21.9, 11.1, 11.1, 3.1, 6.4),
-            ("000660", "SK하이닉스", "반도체", 178000, 2.5, 950000000000, 45.2, 28.1, 15.4, 8.2, 7.5, 2.1, 4.3),
-            ("373220", "LG에너지솔루션", "배터리", 395000, -0.8, 320000000000, -5.2, 12.1, 8.4, 3.1, 2.0, -1.2, 1.1),
-            ("005380", "현대차", "자동차", 242000, 0.5, 410000000000, 22.4, 18.2, 11.5, 5.4, 4.2, 1.1, 2.5),
+        # 2,500개 전 종목을 시뮬레이션 및 청크 분할 적재
+        industries = ["반도체", "배터리", "자동차", "바이오", "인터넷", "로봇", "조선", "금융"]
+        roles = ["대장주", "직접 수혜", "이후 수혜", "후발 수혜"]
+        
+        mock_records = []
+        # 대형주 및 주요 종목 우선 생성
+        core_stocks = [
+            ("005930", "삼성전자", "반도체", "대장주", 74500, 1.2, 1200000000000),
+            ("000660", "SK하이닉스", "반도체", "직접 수혜", 178000, 2.5, 950000000000),
+            ("373220", "LG에너지솔루션", "배터리", "대장주", 395000, -0.8, 320000000000),
+            ("005380", "현대차", "자동차", "대장주", 242000, 0.5, 410000000000),
+            ("035420", "NAVER", "인터넷", "대장주", 215000, 1.1, 280000000000),
+            ("000270", "기아", "자동차", "직접 수혜", 125000, 1.8, 310000000000),
         ]
-        records = []
-        for r in fallback_raw:
-            score, tm = calculate_twenty_precision_metrics(r[4], r[5])
-            records.append({
-                "code": r[0], "name": r[1], "industry": r[2], "role": "대장주" if r[0]=="005930" else "직접 수혜",
+        
+        for code, name, ind, role, price, chg, turnover in core_stocks:
+            score, tm = calculate_precision_metrics(chg, turnover)
+            mock_records.append({
+                "code": code, "name": name, "industry": ind, "role": role,
                 "score": score, "max_score": 95, "foreign_inst_net": 15000,
                 "metrics": {
-                    "current_price": r[3], "change_pct": r[4], "turnover": r[5],
-                    "modal_returns": {"1년": r[6], "6개월": r[7], "3개월": r[8], "1개월": r[9], "20일": r[10], "10일": r[11], "5일": r[12]}
+                    "current_price": price, "change_pct": chg, "turnover": turnover,
+                    "returns": {"1일": 1.2, "2일": -0.5, "3일": 2.1, "4일": 0.8, "5일": 1.5},
+                    "modal_returns": {"1년": 17.6, "6개월": 33.3, "3개월": 21.9, "1개월": 11.1, "20일": 11.1, "10일": 3.1, "5일": 6.4}
                 },
                 "fundamentals": {"per": 14.5, "pbr": 1.4, "roe": 11.2, "dividend_yield": 2.1},
-                "twenty_metrics": tm, "ai_briefing": f"{r[1]} 정밀 퀀트 분석 완료.", "upside_probability": 85
+                "twenty_metrics": tm, "ai_briefing": f"{name} 정밀 퀀트 분석 완료.", "upside_probability": 85
             })
-        db.upsert_candidates(records, time_str)
+
+        # 나머지 2,500종목 규모 확장 시뮬레이션 (청크 단위로 생성 및 적재)
+        for i in range(1, 2500):
+            code_str = f"{i:06d}"
+            ind = industries[i % len(industries)]
+            role = roles[i % len(roles)]
+            price = 10000 + (i * 35) % 150000
+            chg = round(((i % 15) - 7) * 0.4, 2)
+            turnover = 500000000 + (i * 12345678) % 150000000000
+            score, tm = calculate_precision_metrics(chg, turnover)
+            
+            mock_records.append({
+                "code": code_str, "name": f"종목{i}", "industry": ind, "role": role,
+                "score": score, "max_score": 95, "foreign_inst_net": (i % 2 - 1) * 5000,
+                "metrics": {
+                    "current_price": price, "change_pct": chg, "turnover": turnover,
+                    "returns": {"1일": 0.5, "2일": -0.2, "3일": 1.1, "4일": -0.4, "5일": 0.9},
+                    "modal_returns": {"1년": 10.0, "6개월": 15.0, "3개월": 8.0, "1개월": 3.0, "20일": 2.0, "10일": 1.0, "5일": 0.5}
+                },
+                "fundamentals": {"per": 12.0, "pbr": 1.1, "roe": 9.5, "dividend_yield": 2.5},
+                "twenty_metrics": tm, "ai_briefing": f"종목{i} 자동 스캔 완료.", "upside_probability": 75
+            })
+
+        # 청크(500개씩) 단위로 나누어 벌크 적재 수행
+        chunk_size = 500
+        for idx in range(0, len(mock_records), chunk_size):
+            chunk = mock_records[idx:idx + chunk_size]
+            db.upsert_candidates_bulk(chunk, time_str)
 
 collector = StockCollector()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
-    conn = db.get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM disclosures")
-    if cursor.fetchone()[0] == 0:
-        for d in INITIAL_DISCLOSURES:
-            cursor.execute("INSERT INTO disclosures (date_md, time, category, title, sub_title, tag, tag_color) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                           (d["date_md"], d["time"], d["category"], d["title"], d["sub_title"], d["tag"], d["tag_color"]))
-    cursor.execute("SELECT COUNT(*) FROM calendar_events")
-    if cursor.fetchone()[0] == 0:
-        for c in INITIAL_CALENDAR:
-            cursor.execute("INSERT INTO calendar_events (id, category, date_md, time, title, country, tag, tag_color, actual, forecast, source, ai_summary, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                           (c["id"], c["category"], c["date_md"], c["time"], c["title"], c["country"], c["tag"], c["tag_color"], c["actual"], c["forecast"], c["source"], c["ai_summary"], c["status"]))
-    conn.commit()
-    conn.close()
-
+    
+    # 초기 데이터가 없으면 즉시 백그라운드 적재
     if not db.get_all_candidates():
-        threading.Thread(target=collector.incremental_chunk_collection, args=("초기 부팅 수집",), daemon=True).start()
+        threading.Thread(target=collector.run_full_scan, args=("초기 부팅 풀 스캔",), daemon=True).start()
 
+    # ⏰ APScheduler 설정
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    # 장 마감 시간 맞춤 정기 스캔 및 1분 스마트 동기화 트리거
-    scheduler.add_job(lambda: collector.incremental_chunk_collection("정기 스캔"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
+    
+    # 1. 새벽 3시 00분 전 종목 일괄 수집 (Full Sync)
+    scheduler.add_job(lambda: collector.run_full_scan("새벽 정기 풀 스캔"), CronTrigger(hour=3, minute=0))
+    
+    # 2. 평일 오후 3시 45분 장 마감 정기 스캔
+    scheduler.add_job(lambda: collector.run_full_scan("장마감 정기 스캔"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
+    
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -171,12 +165,11 @@ async def read_index():
 @app.get("/api/scan")
 async def api_scan(force: bool = Query(False)):
     if force:
-        threading.Thread(target=collector.incremental_chunk_collection, args=("수동 강제 수집",), daemon=True).start()
+        threading.Thread(target=collector.run_full_scan, args=("수동 강제 풀 스캔",), daemon=True).start()
     candidates = db.get_all_candidates()
-    now_kst, time_str = get_kst_time()
+    _, time_str = get_kst_time()
     base_time = db.get_meta("base_time", time_str)
     return JSONResponse({
-        "generated_at": now_kst.strftime("%Y-%m-%d %H:%M:%S"),
         "time_str": base_time,
         "count": len(candidates),
         "results": candidates,
@@ -184,39 +177,35 @@ async def api_scan(force: bool = Query(False)):
     })
 
 @app.get("/api/disclosures")
-def get_disclosures(category: str = "전체", month_day: str = "", keyword: str = "", days: int = 0):
+def get_disclosures(category: str = "전체"):
     conn = db.get_connection()
     cursor = conn.cursor()
-    query = "SELECT date_md, time, category, title, sub_title, tag, tag_color FROM disclosures WHERE 1=1"
-    params = []
-
-    if category != "전체":
-        query += " AND category = ?"
-        params.append(category)
-    if month_day:
-        query += " AND date_md = ?"
-        params.append(month_day)
-    if keyword:
-        query += " AND (title LIKE ? OR sub_title LIKE ?)"
-        params.extend([f"%{keyword}%", f"%{keyword}%"])
-    
-    query += " ORDER BY id DESC"
-    
-    if days > 0:
-        query += " LIMIT ?"
-        params.append(days * 15)
-
-    cursor.execute(query, params)
-    rows = cursor.fetchall()
-    conn.close()
-
-    return {"status": "success", "data": [dict(row) for row in rows]}
-
-@app.get("/api/calendar/economic")
-def get_economic_calendar():
-    conn = db.get_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM calendar_events WHERE category='economic' ORDER BY date_md ASC")
+    if category == "전체":
+        cursor.execute("SELECT * FROM disclosures ORDER BY id DESC LIMIT 50")
+    else:
+        cursor.execute("SELECT * FROM disclosures WHERE category=? ORDER BY id DESC LIMIT 50", (category,))
     rows = cursor.fetchall()
     conn.close()
     return {"status": "success", "data": [dict(r) for r in rows]}
+
+@app.get("/api/calendar/economic")
+def get_economic_calendar(week: str = "9월 2주 - 9월 3주"):
+    # 주차별 경제 일정 더미 데이터
+    mock_calendar = {
+        "9월 1주 - 9월 2주": [
+            {"id": "c1", "category": "economic", "week_label": "9월 1주 - 9월 2주", "date": "09.03", "time": "21:30", "title": "미국 고용보고서 비농업", "country": "🇺🇸", "tag": "고용지표", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", "actual": "14.2만", "forecast": "16.5만", "source": "US BLS", "ai_summary": "고용 증가세 둔화 흐름 확인", "guide": {"title": "비농업 고용지표", "desc": "미국 노동 시장의 건전성을 보여주는 핵심 지표입니다."}}
+        ],
+        "9월 2주 - 9월 3주": [
+            {"id": "eco_1", "category": "economic", "week_label": "9월 2주 - 9월 3주", "date": "09.17", "time": "03:00", "title": "미국 기준금리 결정(상단)", "country": "🇺🇸", "tag": "금리 동결 및 인하", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve", "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", "guide": {"title": "미국 기준금리", "desc": "연방공개시장위원회(FOMC)에서 결정되는 기준금리로 글로벌 자금 흐름에 절대적인 영향을 미칩니다."}},
+            {"id": "eco_2", "category": "economic", "week_label": "9월 2주 - 9월 3주", "date": "09.17", "time": "21:30", "title": "미국 소매판매", "country": "🇺🇸", "tag": "소비지표", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50", "actual": "0.4%", "forecast": "0.3%", "source": "US Census Bureau", "ai_summary": "소비자들의 지출 여력이 예상보다 양호한 것으로 나타났습니다.", "guide": {"title": "미국 소매판매", "desc": "미국 경제의 70%를 차지하는 소비의 건전성을 측정합니다."}}
+        ],
+        "9월 3주 - 9월 4주": [
+            {"id": "c3", "category": "economic", "week_label": "9월 3주 - 9월 4주", "date": "09.25", "time": "21:30", "title": "미국 2분기 GDP 확정치", "country": "🇺🇸", "tag": "성장률 지표", "tag_color": "text-amber-400 bg-amber-950/50 border-amber-800/50", "actual": "-", "forecast": "3.0%", "source": "US BEA", "ai_summary": "미국 경제 성장 모멘텀 점검 중요 일정", "guide": {"title": "GDP 확정치", "desc": "국가 경제 전체의 최종 생산 성과를 확정 발표하는 지표입니다."}}
+        ]
+    }
+    events = mock_calendar.get(week, [])
+    return {"status": "success", "data": events, "week": week}
+
+@app.get("/api/calendar/earnings")
+def get_earnings_calendar(week: str = "9월 2주 - 9월 3주"):
+    return {"status": "success", "data": [], "week": week}
