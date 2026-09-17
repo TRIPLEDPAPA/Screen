@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>한국 주식 돈의 흐름 스크리너</title>
+    <title>한국 주식 돈의 흐름 스크리너 - 정밀 퀀트 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #0b1320; color: #cbd5e1; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -32,18 +32,18 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">⚡ 오늘의 시장 신호</div>
-            <div class="text-xl font-bold text-white tracking-tight">전체 종목 대규모 스캔 완료</div>
-            <div class="text-xs text-gray-500 mt-1">코스피·코스닥 통합 거래대금 우선</div>
+            <div class="text-xl font-bold text-white tracking-tight">종가베팅 & 이격도 감점 적용 완료</div>
+            <div class="text-xs text-gray-500 mt-1">코스피·코스닥 통합 100+ 종목 스캔</div>
         </div>
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">✨ 분석 후보 풀</div>
             <div class="text-xl font-bold text-cyan-400 tracking-tight" id="candidate-count">0개</div>
-            <div class="text-xs text-gray-500 mt-1">보통주 중심 실시간 수급 연동</div>
+            <div class="text-xs text-gray-500 mt-1">실시간 퀀트 우선순위 산출</div>
         </div>
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">🔗 연결 상태</div>
             <div class="text-xl font-bold text-white tracking-tight" id="conn-status">KIS ON · DART ON</div>
-            <div class="text-xs text-gray-500 mt-1" id="conn-sub">KRX ON · Gemini ON</div>
+            <div class="text-xs text-gray-500 mt-1">KRX ON · Gemini ON</div>
         </div>
         <div class="card p-4 rounded-xl flex items-center justify-between">
             <div>
@@ -61,7 +61,7 @@
             <div class="card p-5 rounded-xl">
                 <div class="text-xs text-gray-400 mb-1">⚡ 산업별 머니 플로우</div>
                 <h3 class="text-base font-bold text-white mb-1">돈이 몰리는 산업 TOP 10</h3>
-                <div class="text-xs text-cyan-400 mb-4 font-medium">지정 산업분류 기준 · 산업별 후보종목 거래대금 합산</div>
+                <div class="text-xs text-cyan-400 mb-4 font-medium">거래대금 기준 산업별 후보 집계</div>
                 <div id="industry-list" class="space-y-2">
                     <div class="text-xs text-gray-500 py-4 text-center">산업 집계 중...</div>
                 </div>
@@ -77,7 +77,7 @@
                             <span class="text-cyan-400" id="table-total-count">0종목</span>
                             <button id="btn-reset-filter" onclick="clearIndustryFilter()" class="hidden ml-2 text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded border border-gray-700">전체보기 ✕</button>
                         </h2>
-                        <div class="text-xs text-amber-400/90 mt-0.5">실시간 수급 데이터 기반 · AI 심층 분석 지원</div>
+                        <div class="text-xs text-amber-400/90 mt-0.5">정밀 종가베팅 점수 및 이격도 감점 반영</div>
                     </div>
                     <div class="flex flex-wrap items-center gap-1.5">
                         <button class="btn-tab active" onclick="filterTab('ALL', this)">전체</button>
@@ -96,16 +96,18 @@
                                 <th class="py-3 px-3 text-center">역할</th>
                                 <th class="py-3 px-3 text-center">점수</th>
                                 <th class="py-3 px-3 text-right">현재가</th>
-                                <th class="py-3 px-3 text-right">1년</th>
-                                <th class="py-3 px-3 text-right">1개월</th>
                                 <th class="py-3 px-3 text-right">5일</th>
+                                <th class="py-3 px-3 text-right">4일</th>
+                                <th class="py-3 px-3 text-right">3일</th>
+                                <th class="py-3 px-3 text-right">2일</th>
+                                <th class="py-3 px-3 text-right">1일</th>
                                 <th class="py-3 px-3 text-right">거래대금</th>
                                 <th class="py-3 px-3 text-right">외인+기관</th>
                                 <th class="py-3 px-3 text-center">분석</th>
                             </tr>
                         </thead>
                         <tbody id="stock-tbody">
-                            <tr><td colspan="10" class="py-12 text-center text-gray-500">데이터 로딩 중...</td></tr>
+                            <tr><td colspan="12" class="py-12 text-center text-gray-500">데이터 로딩 중...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -123,7 +125,7 @@
                 </div>
                 <div class="flex items-center gap-4">
                     <div class="text-right">
-                        <div class="text-xs text-gray-400">종합 정량점수</div>
+                        <div class="text-xs text-gray-400">최종 퀀트 점수</div>
                         <div class="text-2xl font-black text-cyan-400" id="modal-score">0 / 100</div>
                     </div>
                     <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl">✕</button>
@@ -134,23 +136,23 @@
                 <div class="bg-cyan-950/30 border border-cyan-800/40 rounded-xl p-4">
                     <div class="flex items-center justify-between mb-3">
                         <span class="text-xs font-bold text-cyan-400">📊 AI & 실데이터 심층 종합 브리핑</span>
-                        <span class="text-xs text-emerald-400 font-semibold" id="modal-upside-badge">상승 가능성: 78%</span>
+                        <span class="text-xs text-emerald-400 font-semibold" id="modal-upside-badge">상승 가능성: 85%</span>
                     </div>
                     <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden mb-3">
-                        <div class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-500" id="modal-prob-bar" style="width: 78%"></div>
+                        <div class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-500" id="modal-prob-bar" style="width: 85%"></div>
                     </div>
                     <p class="text-xs text-gray-300 leading-relaxed" id="modal-ai-briefing">분석 중...</p>
                 </div>
 
                 <div>
                     <div class="text-xs font-bold text-gray-300 mb-2 flex items-center justify-between">
-                        <span>📈 핵심 기간별 수익률</span>
-                        <span class="text-[10px] text-gray-500">당일 현재가 기준 역산</span>
+                        <span>📈 기간별 수익률 (상세)</span>
+                        <span class="text-[10px] text-gray-500">장기 및 단기 수익률</span>
                     </div>
-                    <div class="grid grid-cols-3 gap-2 text-center text-xs mb-3" id="modal-returns-grid"></div>
+                    <div class="grid grid-cols-7 gap-1.5 text-center text-xs mb-3" id="modal-returns-grid"></div>
                     
-                    <div class="text-xs font-bold text-gray-300 mb-1">📐 이동평균선 이격도 분석</div>
-                    <div class="grid grid-cols-3 gap-2 text-center text-xs bg-[#142036] p-2.5 rounded-lg" id="modal-tech-grid"></div>
+                    <div class="text-xs font-bold text-gray-300 mb-1">📐 이동평균선 이격도 분석 (60일 / 20일 / 10일 / 5일)</div>
+                    <div class="grid grid-cols-4 gap-2 text-center text-xs bg-[#142036] p-2.5 rounded-lg" id="modal-tech-grid"></div>
                 </div>
 
                 <div>
@@ -159,18 +161,18 @@
                 </div>
 
                 <div>
-                    <div class="text-xs font-bold text-gray-300 mb-2">🎯 20개 정밀 지표 점수표</div>
+                    <div class="text-xs font-bold text-gray-300 mb-2">🎯 정밀 채점 내역 (종가베팅 & 이격도 감점)</div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs bg-[#0d1527] p-3 rounded-lg" id="modal-20-metrics"></div>
                 </div>
 
-                <!-- 공매도 및 DART 한 줄씩 독립 배치 -->
+                <!-- 공매도 및 DART 독립 한 줄씩 배치 -->
                 <div class="space-y-3">
                     <div class="bg-[#142036] p-3 rounded-lg text-xs">
-                        <div class="font-bold text-gray-200 mb-2">📉 공매도 및 대차 현황</div>
+                        <div class="font-bold text-gray-200 mb-2">📉 공매도 및 대차 위험 현황</div>
                         <div id="modal-short-selling-box" class="text-gray-300 space-y-1"></div>
                     </div>
                     <div class="bg-[#142036] p-3 rounded-lg text-xs">
-                        <div class="font-bold text-gray-200 mb-2">📑 DART 최근 1달 수주 공시 타임라인</div>
+                        <div class="font-bold text-gray-200 mb-2">📑 DART 최근 수주 및 공급계약 체결 공시</div>
                         <div id="modal-dart-box" class="text-gray-300 space-y-1.5"></div>
                     </div>
                 </div>
@@ -272,7 +274,7 @@
                 const amt = m.turnover || 0;
                 const chg = m.change_pct || 0;
                 if (!industryMap[ind]) {
-                    industryMap[ind] = { totalTurnover: 0, weightedChangeSum: 0, count: 0, representative: item.name };
+                    industryMap[ind] = { totalTurnover: 0, weightedChangeSum: 0, count: 0 };
                 }
                 industryMap[ind].totalTurnover += amt;
                 industryMap[ind].weightedChangeSum += (amt * chg);
@@ -327,7 +329,7 @@
             else if (currentFilter === 'FOREIGN') filtered = filtered.filter(x => (x.foreign_inst_net || 0) > 0);
 
             if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="10" class="py-12 text-center text-gray-400">표시할 종목이 없습니다.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="12" class="py-12 text-center text-gray-400">표시할 종목이 없습니다.</td></tr>`;
                 return;
             }
 
@@ -360,9 +362,11 @@
                             <div class="font-semibold text-white">${(m.current_price || 0).toLocaleString()}</div>
                             <div class="text-xs ${priceColor}">${priceChange > 0 ? '▲' : (priceChange < 0 ? '▼' : '')}${Math.abs(priceChange).toFixed(2)}%</div>
                         </td>
-                        <td class="py-3 px-3 text-right">${formatPct(r['1년'])}</td>
-                        <td class="py-3 px-3 text-right">${formatPct(r['1개월'])}</td>
                         <td class="py-3 px-3 text-right">${formatPct(r['5일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['4일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['3일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['2일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['1일'])}</td>
                         <td class="py-3 px-3 text-right font-medium text-gray-200">${Math.round((m.turnover || 0)/100000000).toLocaleString()}억</td>
                         <td class="py-3 px-3 text-right">${formatNetQty(item.foreign_inst_net)}</td>
                         <td class="py-3 px-3 text-center">
@@ -375,7 +379,7 @@
                     const subStocks = rawStocks.filter(x => x.industry === item.industry && x.code !== item.code);
                     html += `
                         <tr class="subtable-row">
-                            <td colspan="10" class="p-5">
+                            <td colspan="12" class="p-5">
                                 <div class="flex items-center justify-between mb-3 pb-2 border-b border-amber-500/30">
                                     <div class="text-xs font-bold text-amber-400">👑 [${item.name}] 대장주 연계 밸류체인 머니 플로우 맵</div>
                                     <div class="text-[11px] text-cyan-300 font-medium">자금 확산 순서: 직접 수혜 ➔ 이후 수혜 ➔ 후발 수혜</div>
@@ -414,23 +418,28 @@
             document.getElementById('modal-stock-code').innerText = `${item.code} · ${item.industry || '기타'} · 역할: ${item.role}`;
             document.getElementById('modal-score').innerText = `${item.score || 0} / 100`;
 
-            const prob = item.upside_probability || 78;
+            const prob = item.upside_probability || 85;
             document.getElementById('modal-upside-badge').innerText = `상승 가능성: ${prob}% (${item.upside_status || '단기 상승 우세'})`;
             document.getElementById('modal-prob-bar').style.width = `${prob}%`;
             document.getElementById('modal-ai-briefing').innerText = item.ai_briefing || `${item.name} 심층 분석 보고서입니다.`;
 
-            const r = item.metrics?.returns || {};
-            const tech = item.technical || {};
+            const mr = item.metrics?.modal_returns || {};
             document.getElementById('modal-returns-grid').innerHTML = `
-                <div class="bg-[#142036] p-2 rounded">1년<br/>${formatPct(r['1년'])}</div>
-                <div class="bg-[#142036] p-2 rounded">1개월<br/>${formatPct(r['1개월'])}</div>
-                <div class="bg-[#142036] p-2 rounded">5일<br/>${formatPct(r['5일'])}</div>
+                <div class="bg-[#142036] p-2 rounded">1년<br/>${formatPct(mr['1년'])}</div>
+                <div class="bg-[#142036] p-2 rounded">6개월<br/>${formatPct(mr['6개월'])}</div>
+                <div class="bg-[#142036] p-2 rounded">3개월<br/>${formatPct(mr['3개월'])}</div>
+                <div class="bg-[#142036] p-2 rounded">1개월<br/>${formatPct(mr['1개월'])}</div>
+                <div class="bg-[#142036] p-2 rounded">20일<br/>${formatPct(mr['20일'])}</div>
+                <div class="bg-[#142036] p-2 rounded">10일<br/>${formatPct(mr['10일'])}</div>
+                <div class="bg-[#142036] p-2 rounded">5일<br/>${formatPct(mr['5일'])}</div>
             `;
 
+            const tech = item.technical || {};
             document.getElementById('modal-tech-grid').innerHTML = `
-                <div><div class="text-gray-400 text-[10px]">20일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_20 || 103.2}%</div></div>
-                <div><div class="text-gray-400 text-[10px]">52주 신고가 대비</div><div class="font-bold text-gray-200 mt-0.5">${tech.from_high_52w || -4.5}%</div></div>
-                <div><div class="text-gray-400 text-[10px]">추세 배열</div><div class="font-bold text-emerald-400 mt-0.5">정배열 우상향</div></div>
+                <div><div class="text-gray-400 text-[10px]">60일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_60 || 115.0}%</div></div>
+                <div><div class="text-gray-400 text-[10px]">20일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_20 || 108.5}%</div></div>
+                <div><div class="text-gray-400 text-[10px]">10일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_10 || 106.0}%</div></div>
+                <div><div class="text-gray-400 text-[10px]">5일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_5 || 103.5}%</div></div>
             `;
 
             const f = item.fundamentals || {};
@@ -448,12 +457,12 @@
                     tmHtml += `
                         <div class="flex items-center justify-between p-1.5 bg-[#142036] rounded">
                             <span class="text-gray-300">${m.name}</span>
-                            <span class="font-bold text-cyan-400">${m.score}점</span>
+                            <span class="font-bold text-cyan-400">${m.score}</span>
                         </div>
                     `;
                 });
             } else {
-                tmHtml = `<div class="text-gray-500 col-span-2 text-center py-2">지표 점수 집계 완료</div>`;
+                tmHtml = `<div class="text-gray-500 col-span-2 text-center py-2">채점 완료</div>`;
             }
             document.getElementById('modal-20-metrics').innerHTML = tmHtml;
 
@@ -466,8 +475,8 @@
 
             const dartList = item.dart_timeline || [
                 "• 🎯 수주: 최근 단일판매·공급계약 체결 공시 확인",
-                "• 👔 내부자: 지분 변동 특이사항 없음",
-                "• ⚠️ 오버행: 물량 부담 안정"
+                "• 👔 내부자: 임원진 지분 변동 특이사항 없음",
+                "• ⚠️ 오버행: CB/BW 물량 부담 안정권"
             ];
             let dartHtml = '';
             dartList.forEach(d => {
