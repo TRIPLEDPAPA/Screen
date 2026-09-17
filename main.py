@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (ensure_kis_token 및 정밀 산식 적용 백엔드)"""
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (광범위 수집 및 정밀 스코어링 백엔드)"""
 
 from __future__ import annotations
 
@@ -98,7 +98,8 @@ def calculate_comprehensive_scores(turnover: float, vol_ratio: float, close_pos:
     elif turnover >= 50_000_000_000: t_sc = 5
     elif turnover >= 30_000_000_000: t_sc = 4
     elif turnover >= 10_000_000_000: t_sc = 3
-    elif turnover >= 5_000_000_000: t_sc = 1
+    elif turnover >= 3_000_000_000: t_sc = 2
+    elif turnover >= 1_000_000_000: t_sc = 1
     else: t_sc = 0
 
     if vol_ratio >= 3.0: v_sc = 5
@@ -116,7 +117,7 @@ def calculate_comprehensive_scores(turnover: float, vol_ratio: float, close_pos:
     if 3 <= chg <= 8: c_sc = 4
     elif 1 <= chg < 3: c_sc = 3
     elif 8 < chg <= 12: c_sc = 2
-    elif 0 <= chg < 1 or chg > 12: c_sc = 1
+    elif -2 <= chg < 1 or chg > 12: c_sc = 1
     else: c_sc = 0
 
     if body_str >= 50: b_sc = 3
@@ -134,21 +135,21 @@ def calculate_comprehensive_scores(turnover: float, vol_ratio: float, close_pos:
     if foreign_net_ratio >= 3.0: f_sc = 5
     elif foreign_net_ratio >= 2.0: f_sc = 4
     elif foreign_net_ratio >= 1.0: f_sc = 3
-    elif foreign_net_ratio > 0: f_sc = 1
+    elif foreign_net_ratio != 0: f_sc = 1
     else: f_sc = 0
 
     if inst_net_ratio >= 2.5: i_sc = 4
     elif inst_net_ratio >= 1.0: i_sc = 3
-    elif inst_net_ratio > 0: i_sc = 1
+    elif inst_net_ratio != 0: i_sc = 1
     else: i_sc = 0
 
     bt_sc = breakthrough
     closing_bet_score = t_sc + v_sc + cp_sc + c_sc + b_sc + s_sc + ma_sc + f_sc + i_sc + bt_sc
 
-    d5_sc = 5 if 102 <= disp_5 <= 105 else (4 if 100 <= disp_5 < 102 else (3 if 98 <= disp_5 < 100 else (1 if 95 <= disp_5 < 98 else 0)))
-    d10_sc = 5 if 103 <= disp_10 <= 108 else (4 if 100 <= disp_10 < 103 else (3 if 97 <= disp_10 < 100 else (1 if 93 <= disp_10 < 97 else 0)))
-    d20_sc = 5 if 103 <= disp_20 <= 110 else (4 if 100 <= disp_20 < 103 else (3 if 97 <= disp_20 < 100 else (1 if 92 <= disp_20 < 97 else 0)))
-    d60_sc = 5 if 105 <= disp_60 <= 120 else (4 if 100 <= disp_60 < 105 else (3 if 95 <= disp_60 < 100 else (1 if 85 <= disp_60 < 95 else 0)))
+    d5_sc = 5 if 102 <= disp_5 <= 105 else (4 if 100 <= disp_5 < 102 else (3 if 97 <= disp_5 < 100 else (1 if 93 <= disp_5 < 97 else 0)))
+    d10_sc = 5 if 103 <= disp_10 <= 108 else (4 if 100 <= disp_10 < 103 else (3 if 95 <= disp_10 < 100 else (1 if 90 <= disp_10 < 95 else 0)))
+    d20_sc = 5 if 103 <= disp_20 <= 110 else (4 if 100 <= disp_20 < 103 else (3 if 95 <= disp_20 < 100 else (1 if 88 <= disp_20 < 95 else 0)))
+    d60_sc = 5 if 105 <= disp_60 <= 120 else (4 if 100 <= disp_60 < 105 else (3 if 90 <= disp_60 < 100 else (1 if 80 <= disp_60 < 90 else 0)))
     disparity_score = d5_sc + d10_sc + d20_sc + d60_sc
 
     overheat_count = 0
@@ -217,8 +218,9 @@ class StockCollector:
         results = []
         seen = set()
 
+        # 탐색 범위를 코스피/코스닥 각각 5페이지(총 1,000여 종목)로 대폭 확장하여 가능성 있는 종목 모두 수집
         for market in ["KOSPI", "KOSDAQ"]:
-            for page in [1, 2]:
+            for page in range(1, 6):
                 url = f"https://m.stock.naver.com/api/stocks/quant?page={page}&pageSize=100&market={market}"
                 try:
                     res = requests.get(url, headers=headers, timeout=5)
@@ -245,7 +247,7 @@ class StockCollector:
                                     turnover = cur_price * vol
 
                             if turnover <= 0 and cur_price > 0:
-                                turnover = 30_000_000_000
+                                turnover = 5_000_000_000 # 거래대금이 미미해도 기본값 부여하여 후보군 편입
 
                             results.append({
                                 "code": code,
@@ -354,9 +356,9 @@ class StockCollector:
             is_leader = (code == sector_leaders.get(ind) or name in {"삼성전자", "SK하이닉스"}) and (turnover >= 100_000_000_000)
             if is_leader:
                 role = "대장주"
-            elif (name in SOBUJANG_SET or turnover >= 60_000_000_000) and change_pct >= 1.5:
+            elif (name in SOBUJANG_SET or turnover >= 40_000_000_000) and change_pct >= 1.0:
                 role = "직접 수혜"
-            elif turnover >= 20_000_000_000:
+            elif turnover >= 10_000_000_000:
                 role = "이후 수혜"
             else:
                 role = "후발 수혜"
