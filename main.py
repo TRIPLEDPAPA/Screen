@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Money Flow 통합 백엔드 서버 (FastAPI & 퀀트 엔진)"""
+"""Money Flow 통합 백엔드 서버 (FastAPI & 퀀트 엔진 & 새벽 일괄 스케줄러)"""
 
 from __future__ import annotations
 
@@ -73,12 +73,10 @@ def fetch_all_market_indicators() -> dict[str, Any]:
 class StockCollector:
     def run_full_scan(self, session_name: str = "새벽 일괄 수집"):
         _, time_str = get_kst_time()
-        # 2,500개 전 종목을 시뮬레이션 및 청크 분할 적재
         industries = ["반도체", "배터리", "자동차", "바이오", "인터넷", "로봇", "조선", "금융"]
         roles = ["대장주", "직접 수혜", "이후 수혜", "후발 수혜"]
         
         mock_records = []
-        # 대형주 및 주요 종목 우선 생성
         core_stocks = [
             ("005930", "삼성전자", "반도체", "대장주", 74500, 1.2, 1200000000000),
             ("000660", "SK하이닉스", "반도체", "직접 수혜", 178000, 2.5, 950000000000),
@@ -102,7 +100,7 @@ class StockCollector:
                 "twenty_metrics": tm, "ai_briefing": f"{name} 정밀 퀀트 분석 완료.", "upside_probability": 85
             })
 
-        # 나머지 2,500종목 규모 확장 시뮬레이션 (청크 단위로 생성 및 적재)
+        # 2,500개 전 종목 확장 청크 생성
         for i in range(1, 2500):
             code_str = f"{i:06d}"
             ind = industries[i % len(industries)]
@@ -124,7 +122,7 @@ class StockCollector:
                 "twenty_metrics": tm, "ai_briefing": f"종목{i} 자동 스캔 완료.", "upside_probability": 75
             })
 
-        # 청크(500개씩) 단위로 나누어 벌크 적재 수행
+        # 500개 단위 청크 벌크 적재
         chunk_size = 500
         for idx in range(0, len(mock_records), chunk_size):
             chunk = mock_records[idx:idx + chunk_size]
@@ -136,19 +134,15 @@ collector = StockCollector()
 async def lifespan(app: FastAPI):
     db.init_db()
     
-    # 초기 데이터가 없으면 즉시 백그라운드 적재
+    # 초기 데이터 적재
     if not db.get_all_candidates():
         threading.Thread(target=collector.run_full_scan, args=("초기 부팅 풀 스캔",), daemon=True).start()
 
-    # ⏰ APScheduler 설정
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    
-    # 1. 새벽 3시 00분 전 종목 일괄 수집 (Full Sync)
+    # 새벽 3시 00분 전 종목 일괄 수집
     scheduler.add_job(lambda: collector.run_full_scan("새벽 정기 풀 스캔"), CronTrigger(hour=3, minute=0))
-    
-    # 2. 평일 오후 3시 45분 장 마감 정기 스캔
+    # 평일 오후 3시 45분 장 마감 정기 스캔
     scheduler.add_job(lambda: collector.run_full_scan("장마감 정기 스캔"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
-    
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -177,20 +171,34 @@ async def api_scan(force: bool = Query(False)):
     })
 
 @app.get("/api/disclosures")
-def get_disclosures(category: str = "전체"):
+def get_disclosures(category: str = "전체", month_day: str = "", keyword: str = "", days: int = 0):
     conn = db.get_connection()
     cursor = conn.cursor()
-    if category == "전체":
-        cursor.execute("SELECT * FROM disclosures ORDER BY id DESC LIMIT 50")
-    else:
-        cursor.execute("SELECT * FROM disclosures WHERE category=? ORDER BY id DESC LIMIT 50", (category,))
+    query = "SELECT date_md, time, category, title, tag, tag_color FROM disclosures WHERE 1=1"
+    params = []
+
+    if category != "전체":
+        query += " AND category = ?"
+        params.append(category)
+    if month_day:
+        query += " AND date_md = ?"
+        params.append(month_day)
+    if keyword:
+        query += " AND title LIKE ?"
+        params.append(f"%{keyword}%")
+    
+    query += " ORDER BY id DESC"
+    if days > 0:
+        query += " LIMIT ?"
+        params.append(days * 15)
+
+    cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
     return {"status": "success", "data": [dict(r) for r in rows]}
 
 @app.get("/api/calendar/economic")
 def get_economic_calendar(week: str = "9월 2주 - 9월 3주"):
-    # 주차별 경제 일정 더미 데이터
     mock_calendar = {
         "9월 1주 - 9월 2주": [
             {"id": "c1", "category": "economic", "week_label": "9월 1주 - 9월 2주", "date": "09.03", "time": "21:30", "title": "미국 고용보고서 비농업", "country": "🇺🇸", "tag": "고용지표", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", "actual": "14.2만", "forecast": "16.5만", "source": "US BLS", "ai_summary": "고용 증가세 둔화 흐름 확인", "guide": {"title": "비농업 고용지표", "desc": "미국 노동 시장의 건전성을 보여주는 핵심 지표입니다."}}
@@ -203,8 +211,7 @@ def get_economic_calendar(week: str = "9월 2주 - 9월 3주"):
             {"id": "c3", "category": "economic", "week_label": "9월 3주 - 9월 4주", "date": "09.25", "time": "21:30", "title": "미국 2분기 GDP 확정치", "country": "🇺🇸", "tag": "성장률 지표", "tag_color": "text-amber-400 bg-amber-950/50 border-amber-800/50", "actual": "-", "forecast": "3.0%", "source": "US BEA", "ai_summary": "미국 경제 성장 모멘텀 점검 중요 일정", "guide": {"title": "GDP 확정치", "desc": "국가 경제 전체의 최종 생산 성과를 확정 발표하는 지표입니다."}}
         ]
     }
-    events = mock_calendar.get(week, [])
-    return {"status": "success", "data": events, "week": week}
+    return {"status": "success", "data": mock_calendar.get(week, []), "week": week}
 
 @app.get("/api/calendar/earnings")
 def get_earnings_calendar(week: str = "9월 2주 - 9월 3주"):
