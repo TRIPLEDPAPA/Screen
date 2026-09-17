@@ -19,7 +19,7 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 1. 퀀트 후보 종목 테이블
+    # 1. 퀀트 후보 종목 테이블 (2,500개 전 종목 대비)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS candidates (
             code TEXT PRIMARY KEY,
@@ -36,7 +36,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_industry ON candidates(industry);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_score ON candidates(score DESC);")
 
-    # 2. DART 공시 피드 테이블 (월/일 및 키워드 인덱싱)
+    # 2. DART 공시 피드 테이블 (상/하위 계약, 월/일 및 키워드 인덱싱)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS disclosures (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -44,6 +44,7 @@ def init_db():
             time TEXT,
             category TEXT,
             title TEXT,
+            sub_title TEXT,
             tag TEXT,
             tag_color TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -53,7 +54,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_disclosures_category ON disclosures(category);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_disclosures_title ON disclosures(title);")
 
-    # 3. 캘린더 일정 테이블 (2026년 연간 관리)
+    # 3. 캘린더 일정 테이블 (2026년 전체 연간 관리 & 변동성 상태 관리)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS calendar_events (
             id TEXT PRIMARY KEY,
@@ -74,7 +75,7 @@ def init_db():
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_calendar_date ON calendar_events(date_md);")
 
-    # 4. 자사주 매입·소각 추적 테이블 (시총 1조 이상)
+    # 4. 자사주 매입·소각 추적 테이블 (시총 1조 이상, 신규 발표 상단 정렬)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS buybacks (
             code TEXT PRIMARY KEY,
