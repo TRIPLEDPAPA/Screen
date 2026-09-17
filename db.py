@@ -34,11 +34,11 @@ def init_db():
             turnover REAL,
             turnover_100m REAL,
             foreign_inst_net INTEGER,
-            return_5d REAL,
-            return_4d REAL,
-            return_3d REAL,
-            return_2d REAL,
             return_1d REAL,
+            return_2d REAL,
+            return_3d REAL,
+            return_4d REAL,
+            return_5d REAL,
             ref_5d REAL,
             ref_1m REAL,
             ref_3m REAL,
@@ -51,11 +51,12 @@ def init_db():
 
         cursor.execute("PRAGMA table_info(daily_candidates);")
         columns = [row["name"] for row in cursor.fetchall()]
-        if "return_4d" not in columns:
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_4d REAL;")
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_3d REAL;")
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_2d REAL;")
+        if "return_1d" not in columns:
             cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_1d REAL;")
+            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_2d REAL;")
+            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_3d REAL;")
+            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_4d REAL;")
+            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_5d REAL;")
         if "detail_json" not in columns:
             cursor.execute("ALTER TABLE daily_candidates ADD COLUMN detail_json TEXT;")
 
@@ -83,18 +84,19 @@ def upsert_candidates(candidates: list[dict[str, Any]], time_str: str):
                 "twenty_metrics": item.get("twenty_metrics", []),
                 "risks": item.get("risks", {}),
                 "ai_briefing": item.get("ai_briefing", ""),
-                "upside_probability": item.get("upside_probability", 50),
-                "upside_status": item.get("upside_status", "중립 관망"),
+                "upside_probability": item.get("upside_probability", 85),
+                "upside_status": item.get("upside_status", "단기 상승 우세"),
                 "technical": item.get("technical", {}),
                 "dart_timeline": item.get("dart_timeline", []),
-                "advanced_scores": item.get("advanced_scores", {})
+                "advanced_scores": item.get("advanced_scores", {}),
+                "modal_returns": m.get("modal_returns", {})
             }
 
             cursor.execute("""
             INSERT INTO daily_candidates (
                 code, name, industry, role, score, max_score,
                 current_price, change_pct, turnover, turnover_100m,
-                foreign_inst_net, return_5d, return_4d, return_3d, return_2d, return_1d,
+                foreign_inst_net, return_1d, return_2d, return_3d, return_4d, return_5d,
                 ref_5d, ref_1m, ref_3m, ref_6m, ref_1y, detail_json, updated_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(code) DO UPDATE SET
@@ -108,11 +110,11 @@ def upsert_candidates(candidates: list[dict[str, Any]], time_str: str):
                 turnover=excluded.turnover,
                 turnover_100m=excluded.turnover_100m,
                 foreign_inst_net=excluded.foreign_inst_net,
-                return_5d=excluded.return_5d,
-                return_4d=excluded.return_4d,
-                return_3d=excluded.return_3d,
-                return_2d=excluded.return_2d,
                 return_1d=excluded.return_1d,
+                return_2d=excluded.return_2d,
+                return_3d=excluded.return_3d,
+                return_4d=excluded.return_4d,
+                return_5d=excluded.return_5d,
                 ref_5d=excluded.ref_5d,
                 ref_1m=excluded.ref_1m,
                 ref_3m=excluded.ref_3m,
@@ -125,7 +127,7 @@ def upsert_candidates(candidates: list[dict[str, Any]], time_str: str):
                 item.get("role", "후발 수혜"), item.get("score", 0), item.get("max_score", 100),
                 m.get("current_price", 0), m.get("change_pct", 0), m.get("turnover", 0),
                 m.get("turnover_100m", 0), item.get("foreign_inst_net", 0),
-                r.get("5일"), r.get("4일"), r.get("3일"), r.get("2일"), r.get("1일"),
+                r.get("1일"), r.get("2일"), r.get("3일"), r.get("4일"), r.get("5일"),
                 ref.get("5d"), ref.get("1m"), ref.get("3m"), ref.get("6m"), ref.get("1y"),
                 json.dumps(detail_data, ensure_ascii=False),
                 time_str
@@ -154,14 +156,12 @@ def get_all_candidates() -> list[dict[str, Any]]:
             except Exception:
                 pass
 
-            cur_p = r["current_price"] or 1.0
-            r5d = r["return_5d"] if r["return_5d"] is not None else 2.5
-            r4d = r["return_4d"] if r["return_4d"] is not None else 1.8
-            r3d = r["return_3d"] if r["return_3d"] is not None else 1.2
-            r2d = r["return_2d"] if r["return_2d"] is not None else 0.5
             r1d = r["return_1d"] if r["return_1d"] is not None else r.get("change_pct", 0.0)
+            r2d = r["return_2d"] if r["return_2d"] is not None else 0.0
+            r3d = r["return_3d"] if r["return_3d"] is not None else 0.0
+            r4d = r["return_4d"] if r["return_4d"] is not None else 0.0
+            r5d = r["return_5d"] if r["return_5d"] is not None else 0.0
 
-            ref = r.get("detail_json", {}) # fallback ref
             results.append({
                 "code": r["code"],
                 "name": r["name"],
@@ -176,14 +176,14 @@ def get_all_candidates() -> list[dict[str, Any]]:
                     "turnover": r["turnover"],
                     "turnover_100m": r["turnover_100m"],
                     "returns": {
-                        "5일": r5d,
-                        "4일": r4d,
-                        "3일": r3d,
+                        "1일": r1d,
                         "2일": r2d,
-                        "1일": r1d
+                        "3일": r3d,
+                        "4일": r4d,
+                        "5일": r5d
                     },
                     "modal_returns": detail_dict.get("modal_returns", {
-                        "1년": 45.2, "6개월": 28.5, "3개월": 15.4, "1개월": 8.2, "20일": 6.1, "10일": 4.0, "5일": r5d
+                        "1년": 0.0, "6개월": 0.0, "3개월": 0.0, "1개월": 0.0, "20일": 0.0, "10일": 0.0, "5일": r5d
                     })
                 },
                 "past_ref_prices": {
@@ -198,7 +198,7 @@ def get_all_candidates() -> list[dict[str, Any]]:
                 "twenty_metrics": detail_dict.get("twenty_metrics", []),
                 "risks": detail_dict.get("risks", {}),
                 "ai_briefing": detail_dict.get("ai_briefing", ""),
-                "upside_probability": detail_dict.get("upside_probability", 80),
+                "upside_probability": detail_dict.get("upside_probability", 85),
                 "upside_status": detail_dict.get("upside_status", "단기 상승 우세"),
                 "technical": detail_dict.get("technical", {}),
                 "dart_timeline": detail_dict.get("dart_timeline", []),
