@@ -1,6 +1,5 @@
 """50개 섹터 및 밸류체인 마스터 데이터 (sector_master.py)"""
 
-# 50개 섹터별 대장주 및 하위 수혜 종목 사전
 SECTOR_CHAINS = {
     "메모리 반도체": {
         "대장주": ["삼성전자", "SK하이닉스"],
@@ -124,7 +123,6 @@ SECTOR_CHAINS = {
     }
 }
 
-# 6자리 티커 자동 매핑 딕셔너리
 TICKER_MAP = {
     "삼성전자": "005930", "SK하이닉스": "000660", "한미반도체": "042700", "DB하이텍": "000990",
     "리노공업": "058470", "ISC": "095340", "HPSP": "403870", "유진테크": "084370",
@@ -159,9 +157,7 @@ TICKER_MAP = {
     "메리츠금융지주": "138040", "우리금융지주": "316140"
 }
 
-
 def get_stock_profile(name: str) -> tuple[str, str, str]:
-    """종목명을 입력받아 (섹터, 4단계역할, 6자리코드)를 반환"""
     code = TICKER_MAP.get(name, "000000")
     for sector, roles in SECTOR_CHAINS.items():
         for role_name, stocks in roles.items():
