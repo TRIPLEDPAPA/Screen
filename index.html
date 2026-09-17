@@ -32,13 +32,13 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">⚡ 오늘의 시장 신호</div>
-            <div class="text-xl font-bold text-white tracking-tight">전체 후보 스캔 완료</div>
-            <div class="text-xs text-gray-500 mt-1">50개 섹터 · 5일~1일 초단기 시계열</div>
+            <div class="text-xl font-bold text-white tracking-tight">50개 섹터 밸류체인 스캔 완료</div>
+            <div class="text-xs text-gray-500 mt-1">대장주 및 4단계 수혜 시계열 연동</div>
         </div>
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">✨ 분석 후보 풀</div>
-            <div class="text-xl font-bold text-cyan-400 tracking-tight" id="candidate-count">10개</div>
-            <div class="text-xs text-gray-500 mt-1">제한 없는 전체 주도주 동시 비교</div>
+            <div class="text-xl font-bold text-cyan-400 tracking-tight" id="candidate-count">0개</div>
+            <div class="text-xs text-gray-500 mt-1">실시간 데이터 연동 중</div>
         </div>
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">🔗 연결 상태</div>
@@ -48,7 +48,7 @@
         <div class="card p-4 rounded-xl flex items-center justify-between">
             <div>
                 <div class="text-xs text-gray-400 mb-1">분석 기준 (실시간 5s)</div>
-                <div class="text-xl font-bold text-white" id="base-time">09:31:55</div>
+                <div class="text-xl font-bold text-white" id="base-time">09:35:00</div>
             </div>
             <button onclick="triggerScan()" class="bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/40 rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-1">
                 <span id="refresh-spinner">🔄</span> 강제 수집
@@ -74,7 +74,7 @@
                     <div>
                         <h2 class="text-lg font-bold text-white flex items-center gap-2">
                             <span id="table-title">분석 후보 전체</span>
-                            <span class="text-cyan-400" id="table-total-count">10종목</span>
+                            <span class="text-cyan-400" id="table-total-count">0종목</span>
                             <button id="btn-reset-filter" onclick="clearIndustryFilter()" class="hidden ml-2 text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded border border-gray-700">전체보기 ✕</button>
                         </h2>
                         <div class="text-xs text-amber-400/90 mt-0.5">💡 [대장주 ▾]를 누르면 하위 수혜 밸류체인과 키맞추기 룸이 명확하게 펼쳐집니다.</div>
