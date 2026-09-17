@@ -177,26 +177,22 @@ def get_disclosures(category: str = "전체"):
     return {"status": "success", "data": [dict(r) for r in rows]}
 
 @app.get("/api/calendar/economic")
-def get_economic_calendar(week: str = "9월 2주 (09.07 - 09.13)"):
-    mock_calendar = {
-        "9월 1주 (09.01 - 09.06)": [
-            {"id": "c1", "category": "economic", "week_label": "9월 1주 (09.01 - 09.06)", "date": "09.03", "time": "21:30", "title": "미국 고용보고서 비농업", "country": "🇺🇸", "tag": "고용지표", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", "actual": "14.2만", "forecast": "16.5만", "source": "US BLS", "ai_summary": "고용 증가세 둔화 흐름 확인", "guide": {"title": "비농업 고용지표", "desc": "미국 노동 시장 건전성 지표"}}
-        ],
-        "9월 2주 (09.07 - 09.13)": [
-            {"id": "c2", "category": "economic", "week_label": "9월 2주 (09.07 - 09.13)", "date": "09.10", "time": "21:30", "title": "미국 소비자물가지수(CPI)", "country": "🇺🇸", "tag": "물가지표", "tag_color": "text-purple-400 bg-purple-950/50 border-purple-800/50", "actual": "2.5%", "forecast": "2.6%", "source": "US BLS", "ai_summary": "인플레이션 압력이 완화되는 모습을 보였습니다.", "guide": {"title": "미국 CPI", "desc": "소비자 물가 변동을 측정하는 핵심 인플레이션 지표입니다."}}
-        ],
-        "9월 3주 (09.14 - 09.20)": [
-            {"id": "eco_1", "category": "economic", "week_label": "9월 3주 (09.14 - 09.20)", "date": "09.17", "time": "03:00", "title": "미국 기준금리 결정(상단)", "country": "🇺🇸", "tag": "금리 결정", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve", "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", "guide": {"title": "미국 기준금리", "desc": "연방공개시장위원회(FOMC)에서 결정되는 기준금리"}}
-        ],
-        "9월 4주 (09.21 - 09.27)": [
-            {"id": "c4", "category": "economic", "week_label": "9월 4주 (09.21 - 09.27)", "date": "09.25", "time": "21:30", "title": "미국 2분기 GDP 확정치", "country": "🇺🇸", "tag": "성장률", "tag_color": "text-amber-400 bg-amber-950/50 border-amber-800/50", "actual": "-", "forecast": "3.0%", "source": "US BEA", "ai_summary": "미국 경제 성장 모멘텀 점검 중요 일정", "guide": {"title": "GDP 확정치", "desc": "국가 경제 최종 생산 성과 발표"}}
-        ],
-        "9월 5주 (09.28 - 09.30)": [
-            {"id": "c5", "category": "economic", "week_label": "9월 5주 (09.28 - 09.30)", "date": "09.30", "time": "23:00", "title": "미국 9월 소비자신뢰지수", "country": "🇺🇸", "tag": "심리지표", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50", "actual": "-", "forecast": "101.5", "source": "Conference Board", "ai_summary": "소비자들의 경제 신뢰도 점검", "guide": {"title": "소비자신뢰지수", "desc": "소비자들의 경기 체감 심리 지표"}}
+def get_economic_calendar(week: str = ""):
+    # 2026~2030년 어떤 주차가 요청되더라도 에러 없이 대응 가능한 동적 매핑
+    sample_events = []
+    if "2026년 9월" in week:
+        sample_events = [
+            {
+                "id": "eco_1", "category": "economic", "week_label": week, 
+                "date": "09.17", "time": "03:00", "title": "미국 기준금리 결정(상단)", 
+                "country": "🇺🇸", "tag": "금리 결정", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", 
+                "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve", 
+                "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", 
+                "guide": {"title": "미국 기준금리", "desc": "연방공개시장위원회(FOMC)에서 결정되는 기준금리"}
+            }
         ]
-    }
-    return {"status": "success", "data": mock_calendar.get(week, []), "week": week}
+    return {"status": "success", "data": sample_events, "week": week}
 
 @app.get("/api/calendar/earnings")
-def get_earnings_calendar(week: str = "9월 2주 (09.07 - 09.13)"):
+def get_earnings_calendar(week: str = ""):
     return {"status": "success", "data": [], "week": week}
