@@ -50,7 +50,7 @@ def init_db():
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_disclosures_date ON disclosures(date_md DESC);")
 
-    # 3. 캘린더 일정 테이블 (9월 전체 주차별 관리)
+    # 3. 캘린더 일정 테이블 (다년도 주차별 관리)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS calendar_events (
             id TEXT PRIMARY KEY,
