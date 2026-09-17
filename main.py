@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (광범위 수집 및 정밀 스코어링 백엔드)"""
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (월 1회 전체 종목 스캔 및 실시간 검색 백엔드)"""
 
 from __future__ import annotations
 
@@ -218,47 +218,54 @@ class StockCollector:
         results = []
         seen = set()
 
-        # 탐색 범위를 코스피/코스닥 각각 5페이지(총 1,000여 종목)로 대폭 확장하여 가능성 있는 종목 모두 수집
+        # 코스피·코스닥 전 종목(모든 페이지)을 끝까지 순회하는 전체 종목 스캔 로직
         for market in ["KOSPI", "KOSDAQ"]:
-            for page in range(1, 6):
+            page = 1
+            while True:
                 url = f"https://m.stock.naver.com/api/stocks/quant?page={page}&pageSize=100&market={market}"
                 try:
                     res = requests.get(url, headers=headers, timeout=5)
-                    if res.status_code == 200:
-                        stocks = res.json().get("stocks", [])
-                        if not stocks:
-                            break
-                        for item in stocks:
-                            code = str(item.get("itemCode", ""))
-                            name = str(item.get("stockName", ""))
-                            if not re.fullmatch(r"\d{6}", code) or EXCLUDED_NAME.search(name) or code in seen:
-                                continue
-                            seen.add(code)
+                    if res.status_code != 200:
+                        break
+                    stocks = res.json().get("stocks", [])
+                    if not stocks:
+                        break
 
-                            cur_price = num(item.get("closePrice", 0))
-                            change_rate = num(item.get("fluctuationsRatio", 0))
-                            if item.get("compareToPreviousPrice", {}).get("name") == "FALLING":
-                                change_rate = -abs(change_rate)
+                    for item in stocks:
+                        code = str(item.get("itemCode", ""))
+                        name = str(item.get("stockName", ""))
+                        if not re.fullmatch(r"\d{6}", code) or EXCLUDED_NAME.search(name) or code in seen:
+                            continue
+                        seen.add(code)
 
-                            turnover = num(item.get("accumulatedTradingValue", 0))
-                            if turnover <= 0:
-                                vol = num(first(item, "accumulatedTradingVolume", "totalVolume", "volume", default=0))
-                                if vol > 0 and cur_price > 0:
-                                    turnover = cur_price * vol
+                        cur_price = num(item.get("closePrice", 0))
+                        change_rate = num(item.get("fluctuationsRatio", 0))
+                        if item.get("compareToPreviousPrice", {}).get("name") == "FALLING":
+                            change_rate = -abs(change_rate)
 
-                            if turnover <= 0 and cur_price > 0:
-                                turnover = 5_000_000_000 # 거래대금이 미미해도 기본값 부여하여 후보군 편입
+                        turnover = num(item.get("accumulatedTradingValue", 0))
+                        if turnover <= 0:
+                            vol = num(first(item, "accumulatedTradingVolume", "totalVolume", "volume", default=0))
+                            if vol > 0 and cur_price > 0:
+                                turnover = cur_price * vol
 
-                            results.append({
-                                "code": code,
-                                "name": name,
-                                "industry": detect_industry(name, item.get("industryCodeName", "")),
-                                "current_price": cur_price,
-                                "change_pct": change_rate,
-                                "turnover": turnover,
-                            })
+                        if turnover <= 0 and cur_price > 0:
+                            turnover = 1_000_000
+
+                        results.append({
+                            "code": code,
+                            "name": name,
+                            "industry": detect_industry(name, item.get("industryCodeName", "")),
+                            "current_price": cur_price,
+                            "change_pct": change_rate,
+                            "turnover": turnover,
+                        })
+
+                    if len(stocks) < 100:
+                        break
+                    page += 1
                 except Exception:
-                    pass
+                    break
         
         if not results:
             return self._fetch_fallback_core_stocks()
@@ -356,9 +363,9 @@ class StockCollector:
             is_leader = (code == sector_leaders.get(ind) or name in {"삼성전자", "SK하이닉스"}) and (turnover >= 100_000_000_000)
             if is_leader:
                 role = "대장주"
-            elif (name in SOBUJANG_SET or turnover >= 40_000_000_000) and change_pct >= 1.0:
+            elif (name in SOBUJANG_SET or turnover >= 30_000_000_000) and change_pct >= 1.0:
                 role = "직접 수혜"
-            elif turnover >= 10_000_000_000:
+            elif turnover >= 5_000_000_000:
                 role = "이후 수혜"
             else:
                 role = "후발 수혜"
@@ -512,8 +519,9 @@ async def lifespan(app: FastAPI):
         job_collect_market_data("서버 부팅 초기 수집")
 
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    scheduler.add_job(lambda: job_collect_market_data("08:00 장시작 준비"), CronTrigger(hour=8, minute=0, day_of_week="mon-fri"))
-    scheduler.add_job(lambda: job_collect_market_data("15:45 본장 잠정마감"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
+    # 매월 1일 새벽 3시에 코스피·코스닥 전체 종목 정기 스캔 자동 실행
+    scheduler.add_job(lambda: job_collect_market_data("매월 1일 전체 종목 정기 스캔"), CronTrigger(day=1, hour=3, minute=0))
+    scheduler.add_job(lambda: job_collect_market_data("평일 장마감 갱신"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
     scheduler.start()
     yield
     scheduler.shutdown()
