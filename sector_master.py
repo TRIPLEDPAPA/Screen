@@ -1,4 +1,4 @@
-"""50개 섹터 및 밸류체인 마스터 데이터 (sector_master.py)"""
+"""sector_master.py - 50개 섹터 및 밸류체인(대장주·직접·이후·후발) 매핑 마스터"""
 
 SECTOR_CHAINS = {
     "메모리 반도체": {
@@ -163,4 +163,4 @@ def get_stock_profile(name: str) -> tuple[str, str, str]:
         for role_name, stocks in roles.items():
             if name in stocks:
                 return sector, role_name, code
-    return "제조/기타", "후발 수혜", code
+    return "기타", "후발 수혜", code
