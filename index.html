@@ -14,7 +14,6 @@
         th { background-color: #0d1527; color: #64748b; font-weight: 600; font-size: 0.82rem; white-space: nowrap; }
         td { border-bottom: 1px solid #1e293b; font-size: 0.88rem; white-space: nowrap; }
         tr:hover td { background-color: #162238; }
-
         .badge-leader { background-color: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 9999px; padding: 3px 10px; font-size: 0.75rem; font-weight: 700; }
         .btn-tab { background-color: #132238; color: #94a3b8; border-radius: 9999px; padding: 4px 14px; font-size: 0.8rem; transition: all 0.2s; }
         .btn-tab.active { background-color: #0d9488; color: #ffffff; font-weight: 600; }
@@ -36,7 +35,7 @@
                     <button onclick="switchTab('notice')" id="nav-notice" class="nav-btn hover:text-cyan-400 pb-1">공지</button>
                 </nav>
             </div>
-            <div class="text-xs text-slate-400">2026.09.17 기준</div>
+            <div class="text-xs text-slate-400" id="update-time">실시간 연동 대기중...</div>
         </div>
     </header>
 
@@ -183,38 +182,38 @@
                     </a>
                 </div>
             </div>
-
         </section>
 
-        <!-- [ 공시 피드 탭 ] -->
-        <section id="tab-feed" class="tab-content hidden space-y-4">
-            <div class="card p-5 rounded-xl shadow-sm space-y-4">
-                <h2 class="text-base font-bold text-white">DART 실시간 공시 피드</h2>
-            </div>
-        </section>
-
-        <!-- [ MONEY FLOW 탭 ] -->
+        <!-- [ MONEY FLOW 탭 ]: 퀀트 엔진 스크리너 연동 -->
         <section id="tab-money" class="tab-content hidden space-y-4">
             <div class="table-container p-5 rounded-xl">
-                <h2 class="text-base font-bold text-white mb-4">MONEY FLOW 퀀트 스크리너 전체</h2>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-base font-bold text-white">MONEY FLOW 퀀트 스크리너</h2>
+                    <span class="text-xs text-cyan-400" id="quant-count">데이터 로딩 중...</span>
+                </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left border-collapse">
                         <thead>
                             <tr class="border-b border-gray-800">
-                                <th class="py-3 px-3">종목</th>
-                                <th class="py-3 px-3 text-center">역할</th>
+                                <th class="py-3 px-3">종목명</th>
+                                <th class="py-3 px-3 text-center">섹터 / 역할</th>
                                 <th class="py-3 px-3 text-right">현재가</th>
+                                <th class="py-3 px-3 text-right">등락률</th>
+                                <th class="py-3 px-3 text-center">숏스퀴즈 여부</th>
+                                <th class="py-3 px-3 text-center">진입 판정</th>
+                                <th class="py-3 px-3 text-right">우선순위 점수</th>
                             </tr>
                         </thead>
-                        <tbody id="money-tbody"></tbody>
+                        <tbody id="quant-tbody"></tbody>
                     </table>
                 </div>
             </div>
         </section>
-        
-        <section id="tab-hozai" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">실시간 호재</div></section>
-        <section id="tab-buyback" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">자사주소각</div></section>
-        <section id="tab-notice" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">공지</div></section>
+
+        <section id="tab-feed" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">공시 피드 영역</div></section>
+        <section id="tab-hozai" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">실시간 호재 영역</div></section>
+        <section id="tab-buyback" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">자사주소각 영역</div></section>
+        <section id="tab-notice" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">공지사항 영역</div></section>
 
     </main>
 
@@ -231,11 +230,16 @@
             activeNav.classList.add('text-cyan-400', 'font-semibold', 'border-b-2', 'border-cyan-400');
         }
 
-        async function fetchMarketData() {
+        async function fetchDashboardData() {
             try {
                 const res = await fetch('/api/scan');
                 const data = await res.json();
                 
+                if (data.generated_at) {
+                    document.getElementById('update-time').innerText = `${data.generated_at} 기준 (1분 갱신 LIVE)`;
+                }
+
+                // 1. 주요지표 및 야간시세 바인딩
                 if (data.market) {
                     const m = data.market.macro;
                     for (const [key, obj] of Object.entries(m)) {
@@ -263,15 +267,37 @@
                         document.getElementById('bond-30y').innerText = b.yield_30y.val;
                     }
                 }
+
+                // 2. MONEY FLOW 퀀트 스크리너 테이블 바인딩
+                if (data.results) {
+                    const tbody = document.getElementById('quant-tbody');
+                    document.getElementById('quant-count').innerText = `총 ${data.results.length}개 종목 스캔 완료`;
+                    let html = '';
+                    data.results.forEach(item => {
+                        const chgColor = item.등락률 >= 0 ? 'text-rose-400' : 'text-sky-400';
+                        html += `
+                            <tr>
+                                <td class="py-3 px-3 font-bold text-white">${item.종목명} <span class="text-[10px] text-slate-500 font-normal">(${item.종목코드})</span></td>
+                                <td class="py-3 px-3 text-center"><span class="badge-leader">${item.섹터}</span> <span class="text-xs text-slate-400">· ${item.역할}</span></td>
+                                <td class="py-3 px-3 text-right text-white font-semibold">${item.현재가.toLocaleString()}원</td>
+                                <td class="py-3 px-3 text-right font-bold ${chgColor}">${item.등락률 >= 0 ? '+' : ''}${item.등락률}%</td>
+                                <td class="py-3 px-3 text-center text-xs">${item.숏스퀴즈적합여부}</td>
+                                <td class="py-3 px-3 text-center text-xs font-bold">${item.진입판정}</td>
+                                <td class="py-3 px-3 text-right font-black text-cyan-400">${item.최종우선순위점수}점</td>
+                            </tr>
+                        `;
+                    });
+                    tbody.innerHTML = html;
+                }
             } catch (err) {
-                console.error("실시간 지표 연동 실패:", err);
+                console.error("실시간 데이터 동기화 실패:", err);
             }
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            fetchMarketData();
-            // 1분마다 자동 갱신
-            setInterval(fetchMarketData, 60000);
+            fetchDashboardData();
+            // Render 무료 서버 절전 방지 및 실시간 업데이트를 위한 1분(60,000ms) 간격 폴링
+            setInterval(fetchDashboardData, 60000);
         });
     </script>
 </body>
