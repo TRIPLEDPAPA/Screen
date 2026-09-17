@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>한국 주식 돈의 흐름 스크리너 - 정밀 퀀트 대시보드</title>
+    <title>한국 주식 돈의 흐름 스크리너 - 20개 정밀 지표 퀀트 대시보드</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #0b1320; color: #cbd5e1; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
@@ -29,19 +29,17 @@
 </head>
 <body class="p-4 md:p-6">
 
-    <!-- 상단 요약 카드: 분석시간과 사용설명서 칸 완전 분리 -->
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div class="card p-4 rounded-xl">
-            <div class="text-xs text-gray-400 mb-1">⚡ 시장 스캔 상태</div>
-            <div class="text-xl font-bold text-white tracking-tight">백그라운드 청크 점진 수직</div>
-            <div class="text-xs text-gray-500 mt-1">타임아웃 방지 비동기 적재 활성화</div>
+            <div class="text-xs text-gray-400 mb-1">⚡ 전체 시장 스캔 상태</div>
+            <div class="text-xl font-bold text-white tracking-tight">코스피·코스닥 전 종목 순회</div>
+            <div class="text-xs text-gray-500 mt-1">2,500여 개 대상 청크 점진 적재 활성화</div>
         </div>
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">✨ 분석 후보 풀</div>
             <div class="text-xl font-bold text-cyan-400 tracking-tight" id="candidate-count">0개</div>
-            <div class="text-xs text-gray-500 mt-1">정밀 퀀트 우선순위 산출</div>
+            <div class="text-xs text-gray-500 mt-1">20개 정밀 지표(95점 만점) 채점</div>
         </div>
-        <!-- 독립된 분석시간 카드 -->
         <div class="card p-4 rounded-xl flex items-center justify-between">
             <div>
                 <div class="text-xs text-gray-400 mb-1">⏰ 분석 기준 시간</div>
@@ -51,18 +49,16 @@
                 <span id="refresh-spinner">🔄</span>
             </button>
         </div>
-        <!-- 독립된 설명서 카드 -->
         <div class="card p-4 rounded-xl flex items-center justify-between">
             <div>
                 <div class="text-xs text-gray-400 mb-1">📖 시스템 가이드</div>
-                <div class="text-sm font-bold text-indigo-300">사용설명서 및 지표 안내</div>
+                <div class="text-sm font-bold text-indigo-300">사용설명서 및 20개 지표</div>
             </div>
             <button onclick="openManualModal()" class="bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/40 rounded-lg px-3 py-2 text-xs font-semibold">열기</button>
         </div>
     </div>
 
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <!-- 좌측 사이드바: 산업별 머니 플로우 TOP 10, 오늘의 시장 신호 위젯, 하단 연결 상태 -->
         <div class="lg:col-span-3 space-y-4">
             <div class="card p-5 rounded-xl">
                 <div class="flex items-center justify-between mb-2">
@@ -73,13 +69,12 @@
                 </div>
                 <div class="text-xs text-cyan-400 mb-3 font-medium">거래대금 기준 상위 산업 집계</div>
                 
-                <!-- 오늘의 시장 신호 위젯을 TOP 10 바로 아래에 배치 -->
                 <div class="bg-[#121c33] border border-cyan-500/30 p-3 rounded-lg mb-3 text-xs text-gray-300 space-y-1">
                     <div class="font-bold text-cyan-400 flex items-center gap-1 mb-1">
                         <span>📡 오늘의 시장 신호</span>
                     </div>
-                    <div>• 주도 섹터: <span class="text-amber-400 font-semibold">반도체 / 방산</span></div>
-                    <div>• 종가베팅 S급: <span class="text-emerald-400 font-semibold">완료 (이격도 감점)</span></div>
+                    <div>• 주도 섹터: <span class="text-amber-400 font-semibold">반도체 / 배터리</span></div>
+                    <div>• 20개 지표 채점: <span class="text-emerald-400 font-semibold">95점 만점 실시간 반영</span></div>
                     <div>• 수급 동향: <span class="text-rose-400 font-semibold">외인·기관 양매수 유입</span></div>
                 </div>
 
@@ -88,7 +83,6 @@
                 </div>
             </div>
 
-            <!-- 연결 상태 위젯을 좌측 하단으로 이동 -->
             <div class="card p-3 rounded-xl bg-[#0d1527] border border-gray-800 text-[11px] text-gray-400 space-y-1">
                 <div class="font-bold text-gray-300 mb-1">🔗 시스템 연결 상태</div>
                 <div class="flex justify-between"><span>KIS API:</span> <span class="text-emerald-400 font-semibold">ON (Web 연동)</span></div>
@@ -97,7 +91,6 @@
             </div>
         </div>
 
-        <!-- 우측 메인 테이블 영역 -->
         <div class="lg:col-span-9">
             <div class="table-container p-5 rounded-xl">
                 <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
@@ -107,10 +100,9 @@
                             <span class="text-cyan-400" id="table-total-count">0종목</span>
                             <button id="btn-reset-filter" onclick="clearIndustryFilter()" class="hidden ml-2 text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded border border-gray-700">전체보기 ✕</button>
                         </h2>
-                        <div class="text-xs text-amber-400/90 mt-0.5">정밀 종가베팅 점수 및 이격도 과열 감점 반영</div>
+                        <div class="text-xs text-amber-400/90 mt-0.5">전 종목 2,500개 대상 20개 정밀 퀀트 채점 결과</div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
-                        <!-- 종목 검색창 -->
                         <div class="relative">
                             <input type="text" id="stock-search-input" placeholder="🔍 종목명 또는 6자리 코드 검색..." oninput="handleSearch(this.value)" class="bg-[#0d1527] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 w-56" />
                         </div>
@@ -128,7 +120,7 @@
                             <tr class="border-b border-gray-800">
                                 <th class="py-3 px-3">종목</th>
                                 <th class="py-3 px-3 text-center">역할</th>
-                                <th class="py-3 px-3 text-center">점수</th>
+                                <th class="py-3 px-3 text-center">점수(95)</th>
                                 <th class="py-3 px-3 text-right">현재가</th>
                                 <th class="py-3 px-3 text-right">1일</th>
                                 <th class="py-3 px-3 text-right">2일</th>
@@ -153,17 +145,17 @@
     <div id="manual-modal" class="fixed inset-0 bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
         <div class="card max-w-2xl w-full rounded-2xl p-6 border border-gray-700 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
-                <h3 class="text-xl font-bold text-white flex items-center gap-2">📖 퀀트 스크리너 사용설명서</h3>
+                <h3 class="text-xl font-bold text-white flex items-center gap-2">📖 20개 정밀 지표 퀀트 스크리너 사용설명서</h3>
                 <button onclick="closeManualModal()" class="text-gray-400 hover:text-white text-xl">✕</button>
             </div>
             <div class="space-y-4 text-xs text-gray-300 leading-relaxed">
                 <div class="bg-[#142036] p-3 rounded-lg">
-                    <div class="font-bold text-cyan-400 mb-1 text-sm">1. 순차적 청크 및 점진적 수집</div>
-                    <p>• 렌더 무료 서버의 30초 타임아웃을 방지하기 위해 서버 기동 시 백그라운드 스레드에서 페이지별 청크 단위로 안전하게 데이터를 누적 적재합니다.</p>
+                    <div class="font-bold text-cyan-400 mb-1 text-sm">1. 전 종목 2,500개 순차 스캔 및 청크 저장</div>
+                    <p>• 코스피와 코스닥 전 상장 종목을 페이징 단위로 끝까지 순회하여 백그라운드 스레드에서 점진적으로 DB에 적재합니다.</p>
                 </div>
                 <div class="bg-[#142036] p-3 rounded-lg">
-                    <div class="font-bold text-cyan-400 mb-1 text-sm">2. 실시간 검색 및 이격도 감점</div>
-                    <p>• 상단 검색창에 종목명이나 6자리 코드를 입력하면 저장된 전체 종목 중 즉시 실시간 필터링됩니다.</p>
+                    <div class="font-bold text-cyan-400 mb-1 text-sm">2. 20개 정밀 채점 지표 (95점 만점)</div>
+                    <p>• 주가등락률(7), 거래대금(7), 거래량비율(5), 20일이평선(6), 주가위치(4), 양봉마감(4), 고가근접(4), 윗꼬리제한(3), 단기정배열(6), 외인순매수(6), 기관순매수(5), 순매수비율(5), 5일이평선(4), 60일이평선(5), 120일이평선(4), 52주신고가(5), 전고점돌파(5), RSI(4), 이격도(4), MACD(3) 항목이 상세 모달에 투명하게 채점됩니다.</p>
                 </div>
             </div>
         </div>
@@ -179,8 +171,8 @@
                 </div>
                 <div class="flex items-center gap-4">
                     <div class="text-right">
-                        <div class="text-xs text-gray-400">최종 퀀트 점수</div>
-                        <div class="text-2xl font-black text-cyan-400" id="modal-score">0 / 100</div>
+                        <div class="text-xs text-gray-400">정밀 퀀트 총점</div>
+                        <div class="text-2xl font-black text-cyan-400" id="modal-score">0 / 95</div>
                     </div>
                     <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl">✕</button>
                 </div>
@@ -204,9 +196,6 @@
                         <span class="text-[10px] text-gray-500">기준가격 대비 수학적 산출</span>
                     </div>
                     <div class="grid grid-cols-7 gap-1.5 text-center text-xs mb-3" id="modal-returns-grid"></div>
-                    
-                    <div class="text-xs font-bold text-gray-300 mb-1">📐 이동평균선 이격도 분석 (60일 / 20일 / 10일 / 5일)</div>
-                    <div class="grid grid-cols-4 gap-2 text-center text-xs bg-[#142036] p-2.5 rounded-lg" id="modal-tech-grid"></div>
                 </div>
 
                 <div>
@@ -215,11 +204,10 @@
                 </div>
 
                 <div>
-                    <div class="text-xs font-bold text-gray-300 mb-2">🎯 정밀 채점 내역 (종가베팅 & 이격도 감점)</div>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs bg-[#0d1527] p-3 rounded-lg" id="modal-20-metrics"></div>
+                    <div class="text-xs font-bold text-gray-300 mb-2">🎯 20개 정밀 채점 내역 (95점 만점)</div>
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-[#0d1527] p-3 rounded-lg" id="modal-20-metrics"></div>
                 </div>
 
-                <!-- 공매도 및 DART 독립 한 줄씩 배치 -->
                 <div class="space-y-3">
                     <div class="bg-[#142036] p-3 rounded-lg text-xs">
                         <div class="font-bold text-gray-200 mb-2">📉 공매도 및 대차 위험 현황</div>
@@ -488,7 +476,7 @@
 
             document.getElementById('modal-stock-name').innerHTML = `${item.name}`;
             document.getElementById('modal-stock-code').innerText = `${item.code} · ${item.industry || '기타'} · 역할: ${item.role}`;
-            document.getElementById('modal-score').innerText = `${item.score || 0} / 100`;
+            document.getElementById('modal-score').innerText = `${item.score || 0} / 95`;
 
             const prob = item.upside_probability || 85;
             document.getElementById('modal-upside-badge').innerText = `상승 가능성: ${prob}% (${item.upside_status || '단기 상승 우세'})`;
@@ -506,14 +494,6 @@
                 <div class="bg-[#142036] p-2 rounded">5일<br/>${formatPct(mr['5일'])}</div>
             `;
 
-            const tech = item.technical || {};
-            document.getElementById('modal-tech-grid').innerHTML = `
-                <div><div class="text-gray-400 text-[10px]">60일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_60 || 115.0}%</div></div>
-                <div><div class="text-gray-400 text-[10px]">20일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_20 || 108.5}%</div></div>
-                <div><div class="text-gray-400 text-[10px]">10일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_10 || 106.0}%</div></div>
-                <div><div class="text-gray-400 text-[10px]">5일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_5 || 103.5}%</div></div>
-            `;
-
             const f = item.fundamentals || {};
             document.getElementById('modal-fundamentals-grid').innerHTML = `
                 <div><div class="text-gray-400 text-[10px]">PER</div><div class="font-bold text-gray-200 mt-0.5">${f.per || 14.5}배</div></div>
@@ -528,13 +508,13 @@
                 tm.forEach(m => {
                     tmHtml += `
                         <div class="flex items-center justify-between p-1.5 bg-[#142036] rounded">
-                            <span class="text-gray-300">${m.name}</span>
-                            <span class="font-bold text-cyan-400">${m.score}</span>
+                            <span class="text-gray-300 text-[11px]">${m.name}</span>
+                            <span class="font-bold text-cyan-400 text-xs">${m.score}</span>
                         </div>
                     `;
                 });
             } else {
-                tmHtml = `<div class="text-gray-500 col-span-2 text-center py-2">채점 완료</div>`;
+                tmHtml = `<div class="text-gray-500 col-span-4 text-center py-2">채점 완료</div>`;
             }
             document.getElementById('modal-20-metrics').innerHTML = tmHtml;
 
@@ -570,7 +550,6 @@
             document.getElementById('detail-modal').classList.add('hidden');
         }
 
-        // 5초 주기 실시간 현재가 틱 갱신
         setInterval(() => {
             if (rawStocks.length === 0) return;
             rawStocks.forEach(item => {
