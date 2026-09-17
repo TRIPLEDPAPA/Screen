@@ -21,7 +21,6 @@ def init_db():
     with get_connection() as conn:
         cursor = conn.cursor()
 
-        # 1. 일별 분석 후보 테이블 생성
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS daily_candidates (
             code TEXT PRIMARY KEY,
@@ -50,7 +49,6 @@ def init_db():
         );
         """)
 
-        # 컬럼 존재 여부 확인 및 마이그레이션 보장
         cursor.execute("PRAGMA table_info(daily_candidates);")
         columns = [row["name"] for row in cursor.fetchall()]
         if "ref_5d" not in columns:
@@ -62,7 +60,6 @@ def init_db():
         if "detail_json" not in columns:
             cursor.execute("ALTER TABLE daily_candidates ADD COLUMN detail_json TEXT;")
 
-        # 2. 시장 메타데이터 테이블
         cursor.execute("""
         CREATE TABLE IF NOT EXISTS market_meta (
             key TEXT PRIMARY KEY,
@@ -89,7 +86,8 @@ def upsert_candidates(candidates: list[dict[str, Any]], time_str: str):
                 "ai_briefing": item.get("ai_briefing", ""),
                 "upside_probability": item.get("upside_probability", 50),
                 "upside_status": item.get("upside_status", "중립 관망"),
-                "technical": item.get("technical", {})
+                "technical": item.get("technical", {}),
+                "dart_timeline": item.get("dart_timeline", [])
             }
 
             cursor.execute("""
@@ -198,7 +196,8 @@ def get_all_candidates() -> list[dict[str, Any]]:
                 "ai_briefing": detail_dict.get("ai_briefing", ""),
                 "upside_probability": detail_dict.get("upside_probability", 50),
                 "upside_status": detail_dict.get("upside_status", "중립 관망"),
-                "technical": detail_dict.get("technical", {})
+                "technical": detail_dict.get("technical", {}),
+                "dart_timeline": detail_dict.get("dart_timeline", [])
             })
         return results
 
