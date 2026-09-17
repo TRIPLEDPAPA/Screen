@@ -1,5 +1,5 @@
-#!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (퀀트 엔진, 20개 정밀 지표 및 MONEY갤린더 백엔드)"""
+#!/usr/init/env python3
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (퀀트 엔진, 정밀 지표 및 실시간 캘린더 통합 백엔드)"""
 
 from __future__ import annotations
 
@@ -177,7 +177,6 @@ def fetch_all_market_indicators() -> dict[str, Any]:
         }
     }
 
-# MONEY갤린더 및 공시 데이터 Mock
 DISCLOSURES_DATA = [
     {"id": 1, "time": "20:00", "category": "주요공시", "title": "큐리언트 정정신고서제출요구(2026.09.04. 제출 증권신고서(지분증권))", "tag": "정정신고", "tag_color": "text-yellow-400 bg-yellow-950/50 border-yellow-800/50"},
     {"id": 2, "time": "18:45", "category": "주요공시", "title": "제일엠앤에스 주권매매거래정지해제(상장폐지에 따른 정리매매 개시)", "tag": "거래재개", "tag_color": "text-red-400 bg-red-950/50 border-red-800/50"},
@@ -395,7 +394,7 @@ class StockCollector:
                     "turnover": turnover,
                     "turnover_100m": round(turnover / 100_000_000, 1),
                     "returns": {"1일": r_1d, "2일": r_2d, "3일": r_3d, "4일": r_4d, "5일": r_5d},
-                    "modal_returns": {"1년": r_1y, "6개월": r_6m, "3개월": r_3m, "1개월": r_1m}
+                    "modal_returns": {"1년": r_1y, "6개월": r_6m, "3개월": r_3m, "1개월": r_1m, "20일": r_1m, "10일": r_3d, "5일": r_5d}
                 },
                 "fundamentals": {"per": extra["per"], "pbr": extra["pbr"], "roe": extra["roe"], "dividend_yield": extra["dividend_yield"]},
                 "twenty_metrics": twenty_metrics,
@@ -438,12 +437,14 @@ async def api_scan(force: bool = Query(False)):
     now_kst, time_str = get_kst_time()
     base_time = db.get_meta("base_time", time_str)
     kis_ok = collector.ensure_kis_token()
+    market_data = fetch_all_market_indicators()
 
     return JSONResponse({
         "generated_at": now_kst.strftime("%Y-%m-%d %H:%M:%S"),
         "time_str": base_time,
         "count": len(candidates),
         "results": candidates,
+        "market": market_data,
         "industry_labels": INDUSTRIES,
         "status": {
             "kis": "KIS ON" if kis_ok else "KIS 차단(Web 대체)",
