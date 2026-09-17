@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (강화된 헤더 및 확장 코어 데이터셋 백엔드)"""
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (전체 2,500종목 순차 스캔 및 20개 정밀 지표 채점 백엔드)"""
 
 from __future__ import annotations
 
@@ -182,14 +182,14 @@ class StockCollector:
         """핵심 코어 데이터셋 우선 적재 후 네이버 퀀트 API 순차 확장 수집"""
         _, time_str = get_kst_time()
         
-        # 1. 클라우드 IP 차단에 영향받지 않는 확장 코어 데이터셋(주도주 30여 개) 우선 무조건 적재 (0개 방지 보장)
+        # 1. 클라우드 IP 차단 방어용 확장 코어 데이터셋 우선 무조건 적재 (0개 방지 보장)
         fallback_raw = self._fetch_expanded_fallback_stocks()
         fallback_records = self.build_full_pipeline(fallback_raw)
         db.upsert_candidates(fallback_records, time_str)
         collected_count = len(fallback_records)
         print(f"[{session_name}] 확장 코어 데이터셋 우선 적재 완료: {collected_count}개", file=sys.stderr)
 
-        # 2. 추가 웹 스크래핑 시도 (차단 시 코어 데이터 유지 및 추가 종목 병합)
+        # 2. 추가 웹 스크래핑 시도
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Referer": "https://m.stock.naver.com/",
@@ -255,7 +255,7 @@ class StockCollector:
         print(f"[{session_name}] 최종 DB 적재 완료 (총 {collected_count}개 종목 확보)", file=sys.stderr)
 
     def _fetch_expanded_fallback_stocks(self) -> list[dict[str, Any]]:
-        """클라우드 차단 시 즉시 활용되는 대형 코어 및 주도주 확장 데이터셋 (30종목 이상)"""
+        """대형 코어 및 주도주 확장 데이터셋 (30종목 이상)"""
         stocks = [
             ("005930", "삼성전자", "반도체", 74500, 1.2, 1200000000000),
             ("000660", "SK하이닉스", "반도체", 178000, 2.5, 950000000000),
@@ -387,7 +387,7 @@ class StockCollector:
             ma60_pos = 1.5
             ma120_pos = 0.5
             high_52w_prox = 2.1 if change_pct > 0 else 15.0
-            breakthrough = 1 if change_pct > 3 else 0
+            breakout = 1 if change_pct > 3 else 0
             rsi = 62.0 if change_pct > 0 else 44.0
             disparity = 103.5
             macd_signal = 1 if change_pct > 0 else 0
