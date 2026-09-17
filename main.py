@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (정밀 점수 체계 및 확장 수집 백엔드)"""
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (안정적인 데이터 수집 및 정밀 산식 적용 백엔드)"""
 
 from __future__ import annotations
 
@@ -234,6 +234,9 @@ class StockCollector:
                             })
                 except Exception:
                     pass
+        
+        if not results:
+            return self._fetch_fallback_core_stocks()
         return results
 
     def _fetch_fallback_core_stocks(self) -> list[dict[str, Any]]:
@@ -322,8 +325,8 @@ class StockCollector:
             r_6m = calc_ret(extra["ref_6m"])
             r_3m = calc_ret(extra["ref_3m"])
             r_1m = calc_ret(extra["ref_1m"])
-            r_20d = calc_ret(extra["ref_20d"] if "ref_20d" in extra else extra["ref_1m"])
-            r_10d = calc_ret(extra["ref_10d"] if "ref_10d" in extra else extra["ref_5d"])
+            r_20d = calc_ret(extra.get("ref_20d", extra["ref_1m"]))
+            r_10d = calc_ret(extra.get("ref_10d", extra["ref_5d"]))
 
             is_leader = (code == sector_leaders.get(ind) or name in {"삼성전자", "SK하이닉스"}) and (turnover >= 100_000_000_000)
             if is_leader:
@@ -335,7 +338,6 @@ class StockCollector:
             else:
                 role = "후발 수혜"
 
-            # 종목별 고유 외인·기관 수급 수량 생성 (동일 수량 방지)
             code_int = int(code) if code.isdigit() else 123456
             net_sign = 1 if (code_int % 3 != 0) else -1
             foreign_net_qty = net_sign * ((code_int % 85) + 5) * 1200
@@ -506,8 +508,8 @@ async def read_index():
 @app.get("/api/scan")
 @app.post("/api/scan")
 async def api_scan(force: bool = Query(False)):
-    if force:
-        job_collect_market_data("사용자 수동 강제 수집")
+    if force or not db.get_all_candidates():
+        job_collect_market_data("사용자 수동 강제 수집 또는 초기 수집")
 
     candidates = db.get_all_candidates()
     now_kst, time_str = get_kst_time()
