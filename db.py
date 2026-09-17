@@ -126,7 +126,7 @@ def upsert_candidates(candidates: list[dict[str, Any]], time_str: str):
                 updated_at=excluded.updated_at;
             """, (
                 item["code"], item["name"], item.get("industry", "기타"),
-                item.get("role", "후발 수혜"), item.get("score", 0), item.get("max_score", 100),
+                item.get("role", "후발 수혜"), item.get("score", 0), item.get("max_score", 95),
                 m.get("current_price", 0), m.get("change_pct", 0), m.get("turnover", 0),
                 m.get("turnover_100m", 0), item.get("foreign_inst_net", 0),
                 r.get("1일"), r.get("2일"), r.get("3일"), r.get("4일"), r.get("5일"),
