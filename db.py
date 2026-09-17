@@ -1,217 +1,144 @@
-"""SQLite 기반 주식 데이터 및 분석 지표 영구 보존 모듈 (db.py)"""
+#!/usr/bin/env python3
+"""Money Flow 데이터베이스 최적화 및 고속 I/O 관리 모듈"""
 
 from __future__ import annotations
-
-import json
 import sqlite3
+import json
 from pathlib import Path
-from typing import Any
 
-DB_PATH = Path(__file__).resolve().parent / "market_data.db"
-
+DB_FILE = Path(__file__).resolve().parent / "money_flow.db"
 
 def get_connection() -> sqlite3.Connection:
-    conn = sqlite3.connect(str(DB_PATH), timeout=30.0)
-    conn.execute("PRAGMA journal_mode=WAL;")
+    conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
+    # WAL 모드 활성화로 동시성 및 쓰기 성능 극대화
+    conn.execute("PRAGMA journal_mode=WAL;")
     return conn
 
-
 def init_db():
-    with get_connection() as conn:
-        cursor = conn.cursor()
+    conn = get_connection()
+    cursor = conn.cursor()
 
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS daily_candidates (
+    # 1. 퀀트 후보 종목 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS candidates (
             code TEXT PRIMARY KEY,
             name TEXT,
             industry TEXT,
             role TEXT,
             score INTEGER,
             max_score INTEGER,
-            current_price REAL,
-            change_pct REAL,
-            turnover REAL,
-            turnover_100m REAL,
             foreign_inst_net INTEGER,
-            return_1d REAL,
-            return_2d REAL,
-            return_3d REAL,
-            return_4d REAL,
-            return_5d REAL,
-            ref_5d REAL,
-            ref_1m REAL,
-            ref_3m REAL,
-            ref_6m REAL,
-            ref_1y REAL,
-            detail_json TEXT,
-            updated_at TEXT
-        );
-        """)
+            data_json TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_industry ON candidates(industry);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_score ON candidates(score DESC);")
 
-        cursor.execute("PRAGMA table_info(daily_candidates);")
-        columns = [row["name"] for row in cursor.fetchall()]
-        if "return_1d" not in columns:
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_1d REAL;")
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_2d REAL;")
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_3d REAL;")
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_4d REAL;")
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN return_5d REAL;")
-        if "detail_json" not in columns:
-            cursor.execute("ALTER TABLE daily_candidates ADD COLUMN detail_json TEXT;")
+    # 2. DART 공시 피드 테이블 (월/일 및 키워드 인덱싱)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS disclosures (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date_md TEXT,
+            time TEXT,
+            category TEXT,
+            title TEXT,
+            tag TEXT,
+            tag_color TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_disclosures_date ON disclosures(date_md DESC);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_disclosures_category ON disclosures(category);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_disclosures_title ON disclosures(title);")
 
-        cursor.execute("""
-        CREATE TABLE IF NOT EXISTS market_meta (
+    # 3. 캘린더 일정 테이블 (2026년 연간 관리)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS calendar_events (
+            id TEXT PRIMARY KEY,
+            category TEXT,
+            date_md TEXT,
+            time TEXT,
+            title TEXT,
+            country TEXT,
+            tag TEXT,
+            tag_color TEXT,
+            actual TEXT,
+            forecast TEXT,
+            source TEXT,
+            ai_summary TEXT,
+            status TEXT DEFAULT 'SCHEDULED',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_calendar_date ON calendar_events(date_md);")
+
+    # 4. 자사주 매입·소각 추적 테이블 (시총 1조 이상)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS buybacks (
+            code TEXT PRIMARY KEY,
+            name TEXT,
+            market_cap INTEGER,
+            announcement_date TEXT,
+            plan_period TEXT,
+            plan_qty INTEGER,
+            plan_amount INTEGER,
+            buy_type TEXT,
+            actual_price REAL,
+            actual_days INTEGER,
+            cancellation_status TEXT,
+            sh_reduction INTEGER,
+            shareholder_return_pct REAL,
+            data_json TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_buybacks_date ON buybacks(announcement_date DESC);")
+
+    # 5. 메타 정보 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS meta (
             key TEXT PRIMARY KEY,
-            value TEXT,
-            updated_at TEXT
-        );
-        """)
-        conn.commit()
+            value TEXT
+        )
+    """)
 
+    conn.commit()
+    conn.close()
 
-def upsert_candidates(candidates: list[dict[str, Any]], time_str: str):
-    if not candidates:
-        return
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        for item in candidates:
-            m = item.get("metrics", {})
-            r = m.get("returns", {})
-            ref = item.get("past_ref_prices", {})
-
-            detail_data = {
-                "fundamentals": item.get("fundamentals", {}),
-                "short_selling": item.get("short_selling", {}),
-                "twenty_metrics": item.get("twenty_metrics", []),
-                "risks": item.get("risks", {}),
-                "ai_briefing": item.get("ai_briefing", ""),
-                "upside_probability": item.get("upside_probability", 85),
-                "upside_status": item.get("upside_status", "단기 상승 우세"),
-                "technical": item.get("technical", {}),
-                "dart_timeline": item.get("dart_timeline", []),
-                "advanced_scores": item.get("advanced_scores", {}),
-                "modal_returns": m.get("modal_returns", {})
-            }
-
-            cursor.execute("""
-            INSERT INTO daily_candidates (
-                code, name, industry, role, score, max_score,
-                current_price, change_pct, turnover, turnover_100m,
-                foreign_inst_net, return_1d, return_2d, return_3d, return_4d, return_5d,
-                ref_5d, ref_1m, ref_3m, ref_6m, ref_1y, detail_json, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(code) DO UPDATE SET
-                name=excluded.name,
-                industry=excluded.industry,
-                role=excluded.role,
-                score=excluded.score,
-                max_score=excluded.max_score,
-                current_price=excluded.current_price,
-                change_pct=excluded.change_pct,
-                turnover=excluded.turnover,
-                turnover_100m=excluded.turnover_100m,
-                foreign_inst_net=excluded.foreign_inst_net,
-                return_1d=excluded.return_1d,
-                return_2d=excluded.return_2d,
-                return_3d=excluded.return_3d,
-                return_4d=excluded.return_4d,
-                return_5d=excluded.return_5d,
-                ref_5d=excluded.ref_5d,
-                ref_1m=excluded.ref_1m,
-                ref_3m=excluded.ref_3m,
-                ref_6m=excluded.ref_6m,
-                ref_1y=excluded.ref_1y,
-                detail_json=excluded.detail_json,
-                updated_at=excluded.updated_at;
-            """, (
-                item["code"], item["name"], item.get("industry", "기타"),
-                item.get("role", "후발 수혜"), item.get("score", 0), item.get("max_score", 95),
-                m.get("current_price", 0), m.get("change_pct", 0), m.get("turnover", 0),
-                m.get("turnover_100m", 0), item.get("foreign_inst_net", 0),
-                r.get("1일"), r.get("2일"), r.get("3일"), r.get("4일"), r.get("5일"),
-                ref.get("5d"), ref.get("1m"), ref.get("3m"), ref.get("6m"), ref.get("1y"),
-                json.dumps(detail_data, ensure_ascii=False),
-                time_str
-            ))
-
+def upsert_candidates(records: list[dict], time_str: str):
+    conn = get_connection()
+    cursor = conn.cursor()
+    for r in records:
         cursor.execute("""
-        INSERT INTO market_meta (key, value, updated_at)
-        VALUES ('base_time', ?, ?)
-        ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at;
-        """, (time_str, time_str))
-        conn.commit()
+            INSERT INTO candidates (code, name, industry, role, score, max_score, foreign_inst_net, data_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(code) DO UPDATE SET
+                name=excluded.name, industry=excluded.industry, role=excluded.role,
+                score=excluded.score, max_score=excluded.max_score,
+                foreign_inst_net=excluded.foreign_inst_net, data_json=excluded.data_json,
+                updated_at=CURRENT_TIMESTAMP
+        """, (
+            r["code"], r["name"], r["industry"], r["role"], r["score"], r["max_score"],
+            r["foreign_inst_net"], json.dumps(r, ensure_ascii=False)
+        ))
+    cursor.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('base_time', ?)", (time_str,))
+    conn.commit()
+    conn.close()
 
-
-def get_all_candidates() -> list[dict[str, Any]]:
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM daily_candidates ORDER BY score DESC;")
-        rows = cursor.fetchall()
-        results = []
-        for row in rows:
-            r = dict(row)
-            detail_dict = {}
-            try:
-                if r.get("detail_json"):
-                    detail_dict = json.loads(r["detail_json"])
-            except Exception:
-                pass
-
-            r1d = r["return_1d"] if r["return_1d"] is not None else r.get("change_pct", 0.0)
-            r2d = r["return_2d"] if r["return_2d"] is not None else 0.0
-            r3d = r["return_3d"] if r["return_3d"] is not None else 0.0
-            r4d = r["return_4d"] if r["return_4d"] is not None else 0.0
-            r5d = r["return_5d"] if r["return_5d"] is not None else 0.0
-
-            results.append({
-                "code": r["code"],
-                "name": r["name"],
-                "industry": r["industry"],
-                "role": r["role"],
-                "score": r["score"],
-                "max_score": r["max_score"],
-                "foreign_inst_net": r["foreign_inst_net"],
-                "metrics": {
-                    "current_price": r["current_price"],
-                    "change_pct": r["change_pct"],
-                    "turnover": r["turnover"],
-                    "turnover_100m": r["turnover_100m"],
-                    "returns": {
-                        "1일": r1d,
-                        "2일": r2d,
-                        "3일": r3d,
-                        "4일": r4d,
-                        "5일": r5d
-                    },
-                    "modal_returns": detail_dict.get("modal_returns", {
-                        "1년": 0.0, "6개월": 0.0, "3개월": 0.0, "1개월": 0.0, "20일": 0.0, "10일": 0.0, "5일": r5d
-                    })
-                },
-                "past_ref_prices": {
-                    "5d": r["ref_5d"],
-                    "1m": r["ref_1m"],
-                    "3m": r["ref_3m"],
-                    "6m": r["ref_6m"],
-                    "1y": r["ref_1y"],
-                },
-                "fundamentals": detail_dict.get("fundamentals", {}),
-                "short_selling": detail_dict.get("short_selling", {}),
-                "twenty_metrics": detail_dict.get("twenty_metrics", []),
-                "risks": detail_dict.get("risks", {}),
-                "ai_briefing": detail_dict.get("ai_briefing", ""),
-                "upside_probability": detail_dict.get("upside_probability", 85),
-                "upside_status": detail_dict.get("upside_status", "단기 상승 우세"),
-                "technical": detail_dict.get("technical", {}),
-                "dart_timeline": detail_dict.get("dart_timeline", []),
-                "advanced_scores": detail_dict.get("advanced_scores", {})
-            })
-        return results
-
+def get_all_candidates() -> list[dict]:
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT data_json FROM candidates ORDER BY score DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [json.loads(row["data_json"]) for row in rows]
 
 def get_meta(key: str, default: str = "") -> str:
-    with get_connection() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM market_meta WHERE key = ?", (key,))
-        row = cursor.fetchone()
-        return row["value"] if row else default
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT value FROM meta WHERE key=?", (key,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["value"] if row else default
