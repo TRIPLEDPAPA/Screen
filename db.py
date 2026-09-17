@@ -71,6 +71,8 @@ def init_db():
 
 
 def upsert_candidates(candidates: list[dict[str, Any]], time_str: str):
+    if not candidates:
+        return
     with get_connection() as conn:
         cursor = conn.cursor()
         for item in candidates:
