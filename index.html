@@ -49,64 +49,64 @@
             <!-- 📊 주요지표 섹션 -->
             <div class="card p-4 rounded-xl">
                 <div class="text-xs font-bold text-cyan-400 mb-3 flex items-center gap-1.5">
-                    <span>📊 주요지표 (매크로 & 글로벌 자산)</span>
+                    <span>📊 주요지표</span>
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-7 gap-2.5 text-center">
-                    <a href="https://www.google.com/finance/beta/quote/USD-KRW?sa=X&sqi=2&ved=2ahUKEwjmyN-P3vWWAxX_klYBHSV-HXgQmY0JegQIEBAn" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">💵 환율 (USD)</div>
-                        <div class="text-xs font-bold text-white">미국 달러 / 원</div>
+                    <a href="https://www.google.com/finance/beta/quote/USD-KRW" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
+                        <div class="text-[10px] text-gray-400 mb-1">미국 달러 / 원</div>
+                        <div class="text-sm font-bold text-white" id="macro-usdkrw">--</div>
                     </a>
                     <a href="https://kr.investing.com/indices/korea-200-futures" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">📈 KRW 선물</div>
-                        <div class="text-xs font-bold text-white">코스피 200선물</div>
+                        <div class="text-[10px] text-gray-400 mb-1">코스피 200선물</div>
+                        <div class="text-sm font-bold text-white" id="macro-kospi200_fut">--</div>
                     </a>
                     <a href="https://kr.investing.com/indices/kospi" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🇰🇷 국내 지수</div>
-                        <div class="text-xs font-bold text-white">코스피 지수</div>
+                        <div class="text-[10px] text-gray-400 mb-1">코스피 지수</div>
+                        <div class="text-sm font-bold text-white" id="macro-kospi">--</div>
                     </a>
                     <a href="https://kr.investing.com/indices/kosdaq" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🇰🇷 국내 지수</div>
-                        <div class="text-xs font-bold text-white">코스닥 지수</div>
+                        <div class="text-[10px] text-gray-400 mb-1">코스닥 지수</div>
+                        <div class="text-sm font-bold text-white" id="macro-kosdaq">--</div>
                     </a>
                     <a href="https://kr.investing.com/indices/us-spx-500" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🇺🇸 미국 지수</div>
-                        <div class="text-xs font-bold text-white">S&P 500 (SPX)</div>
+                        <div class="text-[10px] text-gray-400 mb-1">S&P 500 (SPX)</div>
+                        <div class="text-sm font-bold text-white" id="macro-spx">--</div>
                     </a>
                     <a href="https://kr.investing.com/indices/us-30" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🇺🇸 미국 지수</div>
-                        <div class="text-xs font-bold text-white">다우존스 (DJI)</div>
+                        <div class="text-[10px] text-gray-400 mb-1">다우존스 (DJI)</div>
+                        <div class="text-sm font-bold text-white" id="macro-dji">--</div>
                     </a>
                     <a href="https://kr.investing.com/indices/nasdaq-composite" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🇺🇸 미국 지수</div>
-                        <div class="text-xs font-bold text-white">나스닥종합 (IXIC)</div>
+                        <div class="text-[10px] text-gray-400 mb-1">나스닥종합 (IXIC)</div>
+                        <div class="text-sm font-bold text-white" id="macro-nasdaq">--</div>
                     </a>
                     <a href="https://kr.investing.com/commodities/crude-oil" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🛢️ 원자재</div>
-                        <div class="text-xs font-bold text-white">WTI유 선물</div>
+                        <div class="text-[10px] text-gray-400 mb-1">WTI유 선물</div>
+                        <div class="text-sm font-bold text-white" id="macro-wti">--</div>
                     </a>
                     <a href="https://kr.investing.com/commodities/brent-oil" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🛢️ 원자재</div>
-                        <div class="text-xs font-bold text-white">브렌트유 선물</div>
+                        <div class="text-[10px] text-gray-400 mb-1">브렌트유 선물</div>
+                        <div class="text-sm font-bold text-white" id="macro-brent">--</div>
                     </a>
                     <a href="https://kr.investing.com/commodities/copper" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">⛏️ 원자재</div>
-                        <div class="text-xs font-bold text-white">구리 선물</div>
+                        <div class="text-[10px] text-gray-400 mb-1">구리 선물</div>
+                        <div class="text-sm font-bold text-white" id="macro-copper">--</div>
                     </a>
                     <a href="https://kr.investing.com/commodities/us-corn" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🌽 원자재</div>
-                        <div class="text-xs font-bold text-white">미국 옥수수</div>
+                        <div class="text-[10px] text-gray-400 mb-1">미국 옥수수</div>
+                        <div class="text-sm font-bold text-white" id="macro-corn">--</div>
                     </a>
                     <a href="https://www.upbit.com/exchange?code=CRIX.UPBIT.KRW-BTC" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🪙 가상자산</div>
-                        <div class="text-xs font-bold text-white">비트코인 (BTC)</div>
+                        <div class="text-[10px] text-gray-400 mb-1">비트코인</div>
+                        <div class="text-sm font-bold text-white" id="macro-btc">--</div>
                     </a>
                     <a href="https://www.upbit.com/exchange?code=CRIX.UPBIT.KRW-ETH" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🪙 가상자산</div>
-                        <div class="text-xs font-bold text-white">이더리움 (ETH)</div>
+                        <div class="text-[10px] text-gray-400 mb-1">이더리움</div>
+                        <div class="text-sm font-bold text-white" id="macro-eth">--</div>
                     </a>
                     <a href="https://www.upbit.com/exchange?code=CRIX.UPBIT.KRW-XRP" target="_blank" class="card card-link p-3 rounded-lg flex flex-col justify-between">
-                        <div class="text-[10px] text-gray-400 mb-1">🪙 가상자산</div>
-                        <div class="text-xs font-bold text-white">엑스알피 (리플)</div>
+                        <div class="text-[10px] text-gray-400 mb-1">엑스알피(리플)</div>
+                        <div class="text-sm font-bold text-white" id="macro-xrp">--</div>
                     </a>
                 </div>
             </div>
@@ -118,52 +118,48 @@
                 </div>
                 <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-2.5 text-center">
                     <a href="https://www.gate.com/futures/USDT/SAMSUNG_USDT" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
-                        <div class="h-8 flex items-center justify-center mb-1.5">
-                            <svg viewBox="0 0 130 28" class="h-6 w-auto">
-                                <text x="2" y="21" font-family="Arial, sans-serif" font-weight="900" font-size="19" fill="#2563eb" letter-spacing="0.5">SAMSUNG</text>
-                            </svg>
+                        <div class="h-8 flex items-center justify-center mb-1">
+                            <svg viewBox="0 0 130 28" class="h-5 w-auto"><text x="2" y="21" font-family="Arial" font-weight="900" font-size="19" fill="#2563eb">SAMSUNG</text></svg>
                         </div>
-                        <div class="text-[11px] font-bold text-white">삼성전자 야간</div>
+                        <div class="text-xs font-bold text-white" id="night-samsung">--</div>
                     </a>
                     <a href="https://www.gate.com/futures/USDT/SKHYNIX_USDT" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
-                        <div class="h-8 flex items-center justify-center mb-1.5">
-                            <svg viewBox="0 0 130 28" class="h-6 w-auto">
-                                <text x="2" y="21" font-family="Arial, sans-serif" font-weight="900" font-size="18" fill="#e11d48">SK</text>
-                                <text x="30" y="21" font-family="Arial, sans-serif" font-weight="700" font-size="15" fill="#f97316">hynix</text>
+                        <div class="h-8 flex items-center justify-center mb-1">
+                            <svg viewBox="0 0 130 28" class="h-5 w-auto">
+                                <text x="2" y="21" font-family="Arial" font-weight="900" font-size="18" fill="#e11d48">SK</text>
+                                <text x="30" y="21" font-family="Arial" font-weight="700" font-size="15" fill="#f97316">hynix</text>
                             </svg>
                         </div>
-                        <div class="text-[11px] font-bold text-white">하이닉스 야간</div>
+                        <div class="text-xs font-bold text-white" id="night-hynix">--</div>
                     </a>
                     <a href="https://www.gate.com/futures/USDT/HYUNDAI_USDT" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
-                        <div class="h-8 flex items-center justify-center mb-1.5">
-                            <svg viewBox="0 0 120 28" class="h-6 w-auto">
+                        <div class="h-8 flex items-center justify-center mb-1">
+                            <svg viewBox="0 0 120 28" class="h-5 w-auto">
                                 <ellipse cx="16" cy="14" rx="14" ry="9" fill="none" stroke="#38bdf8" stroke-width="2"/>
                                 <path d="M9 10 L13 18 M23 10 L19 18 M11 14 L21 14" stroke="#38bdf8" stroke-width="2" stroke-linecap="round"/>
-                                <text x="36" y="20" font-family="Arial, sans-serif" font-weight="900" font-size="14" fill="#38bdf8" letter-spacing="0.5">HYUNDAI</text>
+                                <text x="36" y="20" font-family="Arial" font-weight="900" font-size="14" fill="#38bdf8">HYUNDAI</text>
                             </svg>
                         </div>
-                        <div class="text-[11px] font-bold text-white">현대차 야간</div>
+                        <div class="text-xs font-bold text-white" id="night-hyundai">--</div>
                     </a>
                     <a href="https://www.gate.com/futures/USDT/SAMSUNGEM_USDT" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
-                        <div class="h-8 flex items-center justify-center mb-1.5">
-                            <svg viewBox="0 0 100 28" class="h-6 w-auto">
-                                <text x="2" y="21" font-family="sans-serif" font-weight="800" font-size="16" fill="#3b82f6">삼성전기</text>
-                            </svg>
+                        <div class="h-8 flex items-center justify-center mb-1">
+                            <svg viewBox="0 0 100 28" class="h-5 w-auto"><text x="2" y="21" font-family="sans-serif" font-weight="800" font-size="16" fill="#3b82f6">삼성전기</text></svg>
                         </div>
-                        <div class="text-[11px] font-bold text-white">삼성전기 야간</div>
+                        <div class="text-xs font-bold text-white" id="night-samsungem">--</div>
                     </a>
                     <a href="https://alternative.me/crypto/fear-and-greed-index/" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
-                        <div class="w-8 h-8 rounded-full bg-amber-900/40 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold text-xs mb-1.5 shadow-sm">😨</div>
-                        <div class="text-[11px] font-bold text-white">암호화폐 탐욕</div>
+                        <div class="text-[10px] text-gray-400 mb-1">암호화폐 탐욕</div>
+                        <div class="text-sm font-bold text-amber-400" id="night-crypto_fg">--</div>
                     </a>
                     <a href="https://fastjusik.com/feargreed" target="_blank" class="card card-link p-3 rounded-lg flex flex-col items-center justify-center">
-                        <div class="w-8 h-8 rounded-full bg-emerald-900/40 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-xs mb-1.5 shadow-sm">📊</div>
-                        <div class="text-[11px] font-bold text-white">코스피 탐욕</div>
+                        <div class="text-[10px] text-gray-400 mb-1">코스피 탐욕</div>
+                        <div class="text-sm font-bold text-emerald-400" id="night-kospi_fg">--</div>
                     </a>
                 </div>
             </div>
 
-            <!-- 🇺🇸 미국 국채 금리 섹션 (데이터 연동 반영) -->
+            <!-- 🇺🇸 미국 국채 금리 섹션 -->
             <div class="card p-4 rounded-xl">
                 <div class="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-1.5">
                     <span>미국 국채 금리</span>
@@ -188,154 +184,39 @@
                 </div>
             </div>
 
-            <!-- 종합 수급 요약 카드 -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div class="card p-5 rounded-xl shadow-sm">
-                    <div class="flex justify-between items-center mb-3">
-                        <h2 class="text-sm font-bold text-white">연기금(공적연금) 누적 수급</h2>
-                        <span class="text-xs bg-blue-900 text-blue-200 px-2 py-0.5 rounded">115거래일</span>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2 text-center py-2 bg-slate-900/50 rounded-lg text-sm">
-                        <div><div class="text-xs text-slate-400">순매수</div><div class="font-bold text-emerald-400">+3,706.6억</div></div>
-                        <div><div class="text-xs text-slate-400">순매도</div><div class="font-bold text-rose-400">-1,988.3억</div></div>
-                        <div><div class="text-xs text-slate-400">매수우위</div><div class="font-bold text-blue-400">65%</div></div>
-                    </div>
-                </div>
-                <div class="card p-5 rounded-xl shadow-sm">
-                    <div class="flex justify-between items-center mb-3">
-                        <h2 class="text-sm font-bold text-white">외국인 거래 누적 수급 현황</h2>
-                        <span class="text-xs bg-emerald-900 text-emerald-200 px-2 py-0.5 rounded">기간 누적</span>
-                    </div>
-                    <div class="grid grid-cols-3 gap-2 text-center py-2 bg-slate-900/50 rounded-lg text-sm">
-                        <div><div class="text-xs text-slate-400">순매수</div><div class="font-bold text-emerald-400">+12,450억</div></div>
-                        <div><div class="text-xs text-slate-400">순매도</div><div class="font-bold text-rose-400">-8,120억</div></div>
-                        <div><div class="text-xs text-slate-400">매수우위</div><div class="font-bold text-blue-400">60%</div></div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="flex justify-between items-center bg-slate-800/60 border border-slate-700 p-4 rounded-xl">
-                <div>
-                    <h3 class="text-sm font-semibold text-white">실시간 수급 요약 및 TOP 랭킹</h3>
-                    <p class="text-xs text-slate-400">원하는 조건과 주체별로 핵심 순매수/순매도를 압축해서 확인하세요.</p>
-                </div>
-                <button onclick="openSummaryModal()" class="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold px-4 py-2 rounded-lg transition shadow">
-                    🔍 '한눈에 보기' 팝업 열기
-                </button>
-            </div>
         </section>
 
         <!-- [ 공시 피드 탭 ] -->
         <section id="tab-feed" class="tab-content hidden space-y-4">
             <div class="card p-5 rounded-xl shadow-sm space-y-4">
-                <div class="flex justify-between items-center">
-                    <h2 class="text-base font-bold text-white">DART 실시간 공시 피드 (Render Proxy 연동)</h2>
-                    <button onclick="loadDartFeed()" class="bg-slate-900 border border-slate-700 text-xs px-3 py-1.5 rounded-lg text-cyan-400 hover:bg-slate-800">새로고침 🔄</button>
-                </div>
-                <div id="dart-feed-container" class="space-y-3">
-                    <div class="p-3 bg-slate-900/60 rounded-lg border border-slate-700/50">
-                        <div class="text-xs text-slate-400 mb-1">18:34 · DART 공식 접수 (Render 프록시 경유)</div>
-                        <div class="font-semibold text-white text-sm">[엘앤에프] 단일판매ㆍ공급계약체결 (계약금액 1,617억)</div>
-                    </div>
-                </div>
+                <h2 class="text-base font-bold text-white">DART 실시간 공시 피드</h2>
             </div>
         </section>
 
         <!-- [ MONEY FLOW 탭 ] -->
         <section id="tab-money" class="tab-content hidden space-y-4">
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
-                <div class="card p-4 rounded-xl">
-                    <div class="text-xs text-gray-400 mb-1">⚡ 전체 시장 스캔 상태</div>
-                    <div class="text-base font-bold text-white">코스피·코스닥 전 종목 순회</div>
-                </div>
-                <div class="card p-4 rounded-xl">
-                    <div class="text-xs text-gray-400 mb-1">✨ 분석 후보 풀</div>
-                    <div class="text-xl font-bold text-cyan-400">3개 종목</div>
-                </div>
-            </div>
-            
-            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                <div class="lg:col-span-3 space-y-4">
-                    <div class="card p-4 rounded-xl">
-                        <h3 class="text-sm font-bold text-white mb-3">산업별 TOP</h3>
-                        <div id="industry-list" class="space-y-2"></div>
-                    </div>
-                </div>
-                <div class="lg:col-span-9">
-                    <div class="table-container p-5 rounded-xl">
-                        <div class="flex justify-between items-center mb-4">
-                            <h2 class="text-base font-bold text-white" id="money-table-title">MONEY FLOW 퀀트 스크리너 전체</h2>
-                            <button id="btn-reset-filter" onclick="clearIndustryFilter()" class="hidden text-xs bg-gray-800 text-gray-300 px-2 py-1 rounded">전체보기 ✕</button>
-                        </div>
-                        <div class="overflow-x-auto">
-                            <table class="w-full text-left border-collapse">
-                                <thead>
-                                    <tr class="border-b border-gray-800">
-                                        <th class="py-3 px-3">종목</th>
-                                        <th class="py-3 px-3 text-center">역할</th>
-                                        <th class="py-3 px-3 text-center">점수</th>
-                                        <th class="py-3 px-3 text-right">현재가</th>
-                                        <th class="py-3 px-3 text-right">거래대금</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="money-tbody"></tbody>
-                            </table>
-                        </div>
-                    </div>
+            <div class="table-container p-5 rounded-xl">
+                <h2 class="text-base font-bold text-white mb-4">MONEY FLOW 퀀트 스크리너 전체</h2>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-gray-800">
+                                <th class="py-3 px-3">종목</th>
+                                <th class="py-3 px-3 text-center">역할</th>
+                                <th class="py-3 px-3 text-right">현재가</th>
+                            </tr>
+                        </thead>
+                        <tbody id="money-tbody"></tbody>
+                    </table>
                 </div>
             </div>
         </section>
-
-        <!-- [ 실시간 호재 탭 ] -->
-        <section id="tab-hozai" class="tab-content hidden space-y-4">
-            <div class="card p-5 rounded-xl shadow-sm space-y-4">
-                <h2 class="text-base font-bold text-white">어닝 서프라이즈 및 핵심 호재 실시간 요약</h2>
-                <div class="p-3 bg-slate-900/60 rounded-lg border-l-4 border-emerald-400">
-                    <div class="text-xs text-slate-400 mb-1">18:34 · 대형 수주 호재</div>
-                    <div class="font-semibold text-white text-sm">엘앤에프 단일판매ㆍ공급계약체결 (1,617억, 매출대비 7.51%)</div>
-                </div>
-            </div>
-        </section>
-
-        <!-- [ 자사주소각 탭 ] -->
-        <section id="tab-buyback" class="tab-content hidden space-y-4">
-            <div class="card p-5 rounded-xl shadow-sm space-y-4">
-                <h2 class="text-base font-bold text-white">자사주 매입·소각 추적 (시총 1조 이상)</h2>
-                <div class="p-4 bg-slate-900 rounded-lg border border-slate-700 flex justify-between items-center">
-                    <span class="font-bold text-white">SK하이닉스</span>
-                    <span class="text-xs bg-emerald-900 text-emerald-300 px-2 py-0.5 rounded">매입 진행 중 · 소각 완료</span>
-                </div>
-            </div>
-        </section>
-
-        <!-- [ 공지 탭 ] -->
-        <section id="tab-notice" class="tab-content hidden space-y-4">
-            <div class="card p-5 rounded-xl shadow-sm space-y-3">
-                <h2 class="text-base font-bold text-white">공지사항</h2>
-                <div class="p-3 bg-slate-900 rounded-lg text-xs text-slate-300">
-                    [2026-09-17] Money Flow 대시보드 최적화 및 Render 서버 프록시 공시 연동 완료.
-                </div>
-            </div>
-        </section>
+        
+        <section id="tab-hozai" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">실시간 호재</div></section>
+        <section id="tab-buyback" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">자사주소각</div></section>
+        <section id="tab-notice" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">공지</div></section>
 
     </main>
-
-    <!-- 팝업 모달 -->
-    <div id="summary-modal" class="fixed inset-0 bg-black/70 hidden flex items-center justify-center z-50 p-4">
-        <div class="card max-w-md w-full rounded-xl p-6 space-y-4 shadow-xl">
-            <div class="flex justify-between items-center border-b border-slate-700 pb-3">
-                <h3 class="font-bold text-white text-sm">수급 요약 랭킹</h3>
-                <button onclick="closeModal()" class="text-slate-400 hover:text-white font-bold">✕</button>
-            </div>
-            <div class="space-y-3 text-xs text-slate-300">
-                <div class="p-2 bg-slate-900 rounded"><strong>순매수 TOP:</strong> 삼성SDI (7일, +997억) / 삼성전자 (2일, +903억)</div>
-                <div class="p-2 bg-slate-900 rounded"><strong>순매도 TOP:</strong> SK스퀘어 (6일, -2,353억) / 현대차 (13일, -1,793억)</div>
-            </div>
-            <div class="flex justify-end pt-2">
-                <button onclick="closeModal()" class="bg-slate-700 hover:bg-slate-600 text-white text-xs px-4 py-2 rounded-lg">닫기</button>
-            </div>
-        </div>
-    </div>
 
     <script>
         function switchTab(tabId) {
@@ -344,117 +225,53 @@
                 el.classList.remove('text-cyan-400', 'font-semibold', 'border-b-2', 'border-cyan-400');
                 el.classList.add('hover:text-cyan-400');
             });
-
             document.getElementById('tab-' + tabId).classList.remove('hidden');
             const activeNav = document.getElementById('nav-' + tabId);
             activeNav.classList.remove('hover:text-cyan-400');
             activeNav.classList.add('text-cyan-400', 'font-semibold', 'border-b-2', 'border-cyan-400');
-
-            if (tabId === 'money') {
-                loadMoneyFlowData();
-            }
         }
 
-        let rawStocks = [
-            { code: '005930', name: '삼성전자', industry: '반도체', role: '대장주', score: 88, metrics: { current_price: 254039, turnover: 1250000000000 } },
-            { code: '000660', name: 'SK하이닉스', industry: '반도체', role: '직접 수혜', score: 91, metrics: { current_price: 1751840, turnover: 980000000000 } },
-            { code: '006400', name: '삼성SDI', industry: '배터리', role: '대장주', score: 84, metrics: { current_price: 420000, turnover: 450000000000 } }
-        ];
-        let selectedIndustry = null;
-
-        async function triggerScan(force = false) {
+        async function fetchMarketData() {
             try {
                 const res = await fetch('/api/scan');
                 const data = await res.json();
-                if (data.bonds) {
-                    document.getElementById('bond-2y').innerText = `${data.bonds.yield_2y.toFixed(2)}%`;
-                    document.getElementById('bond-5y').innerText = `${data.bonds.yield_5y.toFixed(2)}%`;
-                    document.getElementById('bond-10y').innerText = `${data.bonds.yield_10y.toFixed(2)}%`;
-                    document.getElementById('bond-30y').innerText = `${data.bonds.yield_30y.toFixed(2)}%`;
+                
+                if (data.market) {
+                    const m = data.market.macro;
+                    for (const [key, obj] of Object.entries(m)) {
+                        const el = document.getElementById('macro-' + key);
+                        if (el) el.innerHTML = `${obj.val} <span class="${obj.up ? 'text-rose-400' : 'text-sky-400'} text-[10px]">${obj.chg}</span>`;
+                    }
+
+                    const n = data.market.night;
+                    for (const [key, obj] of Object.entries(n)) {
+                        const el = document.getElementById('night-' + key);
+                        if (el) {
+                            if (obj.status) {
+                                el.innerText = `${obj.val} (${obj.status})`;
+                            } else {
+                                el.innerHTML = `${obj.val} <span class="${obj.up ? 'text-rose-400' : 'text-sky-400'} text-[10px]">${obj.chg}</span>`;
+                            }
+                        }
+                    }
+
+                    const b = data.market.bonds;
+                    if (b) {
+                        document.getElementById('bond-2y').innerText = b.yield_2y.val;
+                        document.getElementById('bond-5y').innerText = b.yield_5y.val;
+                        document.getElementById('bond-10y').innerText = b.yield_10y.val;
+                        document.getElementById('bond-30y').innerText = b.yield_30y.val;
+                    }
                 }
             } catch (err) {
-                console.error("국채 금리 데이터 로드 실패:", err);
+                console.error("실시간 지표 연동 실패:", err);
             }
-        }
-
-        function loadMoneyFlowData() {
-            renderIndustryList();
-            renderMoneyTable();
-        }
-
-        function renderIndustryList() {
-            const map = {};
-            rawStocks.forEach(s => {
-                if (!map[s.industry]) map[s.industry] = 0;
-                map[s.industry] += s.metrics.turnover;
-            });
-            let html = '';
-            Object.entries(map).forEach(([ind, turnover]) => {
-                const isAct = selectedIndustry === ind;
-                html += `
-                    <div onclick="selectIndustry('${ind}')" class="p-2.5 rounded-lg bg-slate-900 border ${isAct ? 'border-cyan-400 bg-slate-800' : 'border-slate-800'} cursor-pointer hover:border-cyan-500 transition flex justify-between items-center text-xs">
-                        <span class="font-bold text-white">${ind}</span>
-                        <span class="text-cyan-400">${Math.round(turnover/100000000).toLocaleString()}억</span>
-                    </div>
-                `;
-            });
-            document.getElementById('industry-list').innerHTML = html;
-        }
-
-        function renderMoneyTable() {
-            const tbody = document.getElementById('money-tbody');
-            let list = rawStocks;
-            if (selectedIndustry) list = list.filter(s => s.industry === selectedIndustry);
-
-            let html = '';
-            list.forEach(s => {
-                html += `
-                    <tr>
-                        <td class="py-3 px-3"><div class="font-bold text-white">${s.name}</div><div class="text-[11px] text-gray-500">${s.code}</div></td>
-                        <td class="py-3 px-3 text-center"><span class="badge-leader">${s.role}</span></td>
-                        <td class="py-3 px-3 text-center font-bold text-cyan-400">${s.score}</td>
-                        <td class="py-3 px-3 text-right text-white">${s.metrics.current_price.toLocaleString()}원</td>
-                        <td class="py-3 px-3 text-right text-gray-300">${Math.round(s.metrics.turnover/100000000).toLocaleString()}억</td>
-                    </tr>
-                `;
-            });
-            tbody.innerHTML = html;
-        }
-
-        function selectIndustry(ind) {
-            selectedIndustry = (selectedIndustry === ind) ? null : ind;
-            document.getElementById('money-table-title').innerText = selectedIndustry ? `[${ind}] 섹터 스크리너` : 'MONEY FLOW 퀀트 스크리너 전체';
-            document.getElementById('btn-reset-filter').classList.toggle('hidden', !selectedIndustry);
-            renderIndustryList();
-            renderMoneyTable();
-        }
-
-        function clearIndustryFilter() {
-            selectedIndustry = null;
-            document.getElementById('money-table-title').innerText = 'MONEY FLOW 퀀트 스크리너 전체';
-            document.getElementById('btn-reset-filter').classList.add('hidden');
-            renderIndustryList();
-            renderMoneyTable();
-        }
-
-        async function loadDartFeed() {
-            try {
-                console.log("Render 서버 프록시를 통해 DART 피드 요청 중...");
-            } catch (e) {
-                console.error("DART 피드 로드 실패", e);
-            }
-        }
-
-        function openSummaryModal() {
-            document.getElementById('summary-modal').classList.remove('hidden');
-        }
-
-        function closeModal() {
-            document.getElementById('summary-modal').classList.add('hidden');
         }
 
         window.addEventListener('DOMContentLoaded', () => {
-            triggerScan(false);
+            fetchMarketData();
+            // 1분마다 자동 갱신
+            setInterval(fetchMarketData, 60000);
         });
     </script>
 </body>
