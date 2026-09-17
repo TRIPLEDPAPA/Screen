@@ -1,4 +1,4 @@
-"""sector_master.py - 50개 섹터 및 밸류체인(대장주·직접·이후·후발) 매핑 마스터"""
+"""50개 섹터 및 밸류체인 마스터 데이터 (sector_master.py)"""
 
 SECTOR_CHAINS = {
     "메모리 반도체": {
