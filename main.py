@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (월 1회 전체 종목 스캔 및 실시간 검색 백엔드)"""
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (비동기 백그라운드 청크 수집 및 점진적 DB 저장 백엔드)"""
 
 from __future__ import annotations
 
@@ -7,6 +7,8 @@ import datetime as dt
 import os
 import re
 import sys
+import threading
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
@@ -207,21 +209,23 @@ class StockCollector:
             pass
         return False
 
-    def fetch_primary_or_fallback(self) -> list[dict[str, Any]]:
-        results = self._fetch_naver_quant()
-        if results:
-            return results
-        return self._fetch_fallback_core_stocks()
-
-    def _fetch_naver_quant(self) -> list[dict[str, Any]]:
+    def incremental_chunk_collection(self, session_name: str):
+        """순차적·분할(Chunk) 및 점진적(Incremental) DB 저장 수집 로직"""
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        results = []
-        seen = set()
+        _, time_str = get_kst_time()
 
-        # 코스피·코스닥 전 종목(모든 페이지)을 끝까지 순회하는 전체 종목 스캔 로직
+        # 1. 우선순위 보장을 위해 기본 코어 종목 먼저 즉시 저장
+        core_fallback = self._fetch_fallback_core_stocks()
+        core_records = self.build_full_pipeline(core_fallback)
+        db.upsert_candidates(core_records, time_str)
+        print(f"[{session_name}] 코어 10개 종목 선적재 완료", file=sys.stderr)
+
+        seen = {c["code"] for c in core_fallback}
+
+        # 2. 코스피·코스닥 전 종목 순차적 페이지네이션 및 청크 단위 점진적 저장
         for market in ["KOSPI", "KOSDAQ"]:
             page = 1
-            while True:
+            while page <= 15: # 최대 1,500개 이상 순회
                 url = f"https://m.stock.naver.com/api/stocks/quant?page={page}&pageSize=100&market={market}"
                 try:
                     res = requests.get(url, headers=headers, timeout=5)
@@ -231,6 +235,7 @@ class StockCollector:
                     if not stocks:
                         break
 
+                    chunk_raw = []
                     for item in stocks:
                         code = str(item.get("itemCode", ""))
                         name = str(item.get("stockName", ""))
@@ -252,7 +257,7 @@ class StockCollector:
                         if turnover <= 0 and cur_price > 0:
                             turnover = 1_000_000
 
-                        results.append({
+                        chunk_raw.append({
                             "code": code,
                             "name": name,
                             "industry": detect_industry(name, item.get("industryCodeName", "")),
@@ -261,15 +266,21 @@ class StockCollector:
                             "turnover": turnover,
                         })
 
+                    if chunk_raw:
+                        # 청크 단위 파이프라인 연산 후 즉시 점진적(Incremental) DB 저장
+                        chunk_records = self.build_full_pipeline(chunk_raw)
+                        db.upsert_candidates(chunk_records, time_str)
+                        print(f"[{session_name}] {market} Page {page} 청크 저장 완료: {len(chunk_records)}개", file=sys.stderr)
+
                     if len(stocks) < 100:
                         break
                     page += 1
-                except Exception:
+                    time.sleep(0.3) # 네이버 봇 차단(Rate Limit) 방지용 딜레이
+                except Exception as e:
+                    print(f"[{session_name}] 수집 중 예외 발생 ({market} p.{page}): {e}", file=sys.stderr)
                     break
-        
-        if not results:
-            return self._fetch_fallback_core_stocks()
-        return results
+
+        print(f"[{session_name}] 전체 순차 수집 및 DB 적재 프로세스 완료", file=sys.stderr)
 
     def _fetch_fallback_core_stocks(self) -> list[dict[str, Any]]:
         core = [
@@ -304,7 +315,7 @@ class StockCollector:
             "ma20": round(cur_price * 0.96, 0),
         }
         try:
-            res = requests.get(url, headers=headers, timeout=2.5)
+            res = requests.get(url, headers=headers, timeout=2.0)
             if res.status_code == 200:
                 data = res.json()
                 for item in data.get("totalInfos", []):
@@ -503,25 +514,16 @@ class StockCollector:
 collector = StockCollector()
 
 
-def job_collect_market_data(session_name: str):
-    raw_list = collector.fetch_primary_or_fallback()
-    records = collector.build_full_pipeline(raw_list)
-    if records:
-        _, time_str = get_kst_time()
-        db.upsert_candidates(records, time_str)
-        print(f"[{session_name}] DB 저장 완료: {len(records)}개 종목", file=sys.stderr)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
+    # 서버 기동 시 헬스체크 타임아웃을 막기 위해 수집을 백그라운드 스레드로 비동기 실행
     if not db.get_all_candidates():
-        job_collect_market_data("서버 부팅 초기 수집")
+        threading.Thread(target=collector.incremental_chunk_collection, args=("서버 부팅 백그라운드 초기 수집",), daemon=True).start()
 
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    # 매월 1일 새벽 3시에 코스피·코스닥 전체 종목 정기 스캔 자동 실행
-    scheduler.add_job(lambda: job_collect_market_data("매월 1일 전체 종목 정기 스캔"), CronTrigger(day=1, hour=3, minute=0))
-    scheduler.add_job(lambda: job_collect_market_data("평일 장마감 갱신"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
+    scheduler.add_job(lambda: collector.incremental_chunk_collection("매월 1일 전체 종목 정기 스캔"), CronTrigger(day=1, hour=3, minute=0))
+    scheduler.add_job(lambda: collector.incremental_chunk_collection("평일 장마감 갱신"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -541,8 +543,9 @@ async def read_index():
 @app.get("/api/scan")
 @app.post("/api/scan")
 async def api_scan(force: bool = Query(False)):
-    if force or not db.get_all_candidates():
-        job_collect_market_data("사용자 수동 강제 수집 또는 초기 수집")
+    if force:
+        # 강제 수집 시에도 백그라운드 스레드로 실행하여 타임아웃 방지
+        threading.Thread(target=collector.incremental_chunk_collection, args=("사용자 수동 강제 수집",), daemon=True).start()
 
     candidates = db.get_all_candidates()
     now_kst, time_str = get_kst_time()
