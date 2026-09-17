@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (안정적인 데이터 수집 및 정밀 산식 적용 백엔드)"""
+"""한국 주식 돈의 흐름 스크리너 웹 대시보드 (ensure_kis_token 및 정밀 산식 적용 백엔드)"""
 
 from __future__ import annotations
 
@@ -182,6 +182,29 @@ class StockCollector:
         self.app_secret = os.getenv("KIS_APP_SECRET", "").strip()
         self.dart_key = os.getenv("DART_API_KEY", "").strip()
         self.token = None
+
+    def ensure_kis_token(self) -> bool:
+        if not self.app_key or not self.app_secret:
+            return False
+        if self.token:
+            return True
+        try:
+            res = requests.post(
+                f"{KIS_BASE}/oauth2/tokenP",
+                headers={"Content-Type": "application/json; charset=UTF-8"},
+                json={
+                    "grant_type": "client_credentials",
+                    "appkey": self.app_key,
+                    "appsecret": self.app_secret,
+                },
+                timeout=5,
+            )
+            if res.status_code == 200:
+                self.token = res.json().get("access_token")
+                return bool(self.token)
+        except Exception:
+            pass
+        return False
 
     def fetch_primary_or_fallback(self) -> list[dict[str, Any]]:
         results = self._fetch_naver_quant()
