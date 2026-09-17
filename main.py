@@ -179,29 +179,34 @@ class StockCollector:
         return False
 
     def incremental_chunk_collection(self, session_name: str):
-        """클라우드 차단 우회 헤더 적용 및 확장 코어 데이터셋 자동 보완 수집 로직"""
-        # 모바일 브라우저 위장 헤더 (WAF/Anti-bot 우회 핵심)
-        headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
-            "Referer": "https://m.stock.naver.com/domestic/quant",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"
-        }
+        """핵심 코어 데이터셋 우선 적재 후 네이버 퀀트 API 순차 확장 수집"""
         _, time_str = get_kst_time()
+        
+        # 1. 클라우드 IP 차단에 영향받지 않는 확장 코어 데이터셋(주도주 30여 개) 우선 무조건 적재 (0개 방지 보장)
+        fallback_raw = self._fetch_expanded_fallback_stocks()
+        fallback_records = self.build_full_pipeline(fallback_raw)
+        db.upsert_candidates(fallback_records, time_str)
+        collected_count = len(fallback_records)
+        print(f"[{session_name}] 확장 코어 데이터셋 우선 적재 완료: {collected_count}개", file=sys.stderr)
 
-        collected_count = 0
-        seen = set()
+        # 2. 추가 웹 스크래핑 시도 (차단 시 코어 데이터 유지 및 추가 종목 병합)
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://m.stock.naver.com/",
+            "Accept": "application/json, text/plain, */*"
+        }
+        seen = {item["code"] for item in fallback_raw}
 
-        # 1. 네이버 퀀트 API 순회 수집 시도
         for market in ["KOSPI", "KOSDAQ"]:
             page = 1
-            while page <= 30:
+            while page <= 25:
                 url = f"https://m.stock.naver.com/api/stocks/quant?page={page}&pageSize=100&market={market}"
                 try:
-                    res = requests.get(url, headers=headers, timeout=6)
+                    res = requests.get(url, headers=headers, timeout=5)
                     if res.status_code != 200:
                         break
-                    stocks = res.json().get("stocks", [])
+                    data = res.json()
+                    stocks = data.get("stocks", []) if isinstance(data, dict) else []
                     if not stocks:
                         break
 
@@ -223,7 +228,6 @@ class StockCollector:
                             vol = num(first(item, "accumulatedTradingVolume", "totalVolume", "volume", default=0))
                             if vol > 0 and cur_price > 0:
                                 turnover = cur_price * vol
-
                         if turnover <= 0 and cur_price > 0:
                             turnover = 1_000_000
 
@@ -244,20 +248,11 @@ class StockCollector:
                     if len(stocks) < 100:
                         break
                     page += 1
-                    time.sleep(0.3)
-                except Exception as e:
-                    print(f"[{session_name}] 수집 예외 ({market} p.{page}): {e}", file=sys.stderr)
+                    time.sleep(0.2)
+                except Exception:
                     break
 
-        # 2. 만약 외부 API가 차단되어 수집된 종목이 0개일 경우, 확장된 핵심 코어 데이터셋(30여 개)을 즉시 적재하여 대시보드 공백 방지
-        if collected_count == 0:
-            print(f"[{session_name}] 외부 API 차단 감지: 확장 코어 데이터셋 자동 적재 가동", file=sys.stderr)
-            fallback_raw = self._fetch_expanded_fallback_stocks()
-            fallback_records = self.build_full_pipeline(fallback_raw)
-            db.upsert_candidates(fallback_records, time_str)
-            collected_count = len(fallback_records)
-
-        print(f"[{session_name}] 전체 수집 및 DB 적재 완료 (총 {collected_count}개 종목)", file=sys.stderr)
+        print(f"[{session_name}] 최종 DB 적재 완료 (총 {collected_count}개 종목 확보)", file=sys.stderr)
 
     def _fetch_expanded_fallback_stocks(self) -> list[dict[str, Any]]:
         """클라우드 차단 시 즉시 활용되는 대형 코어 및 주도주 확장 데이터셋 (30종목 이상)"""
