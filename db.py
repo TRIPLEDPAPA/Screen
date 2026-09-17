@@ -18,7 +18,7 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 1. 퀀트 후보 종목 테이블 (2,500개 전 종목 대비)
+    # 1. 퀀트 후보 종목 테이블 (2,500개 전 종목 대응)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS candidates (
             code TEXT PRIMARY KEY,
@@ -50,7 +50,7 @@ def init_db():
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_disclosures_date ON disclosures(date_md DESC);")
 
-    # 3. 캘린더 일정 테이블 (주차별 관리)
+    # 3. 캘린더 일정 테이블 (9월 전체 주차별 관리)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS calendar_events (
             id TEXT PRIMARY KEY,
@@ -66,6 +66,7 @@ def init_db():
             forecast TEXT,
             source TEXT,
             ai_summary TEXT,
+            guide_json TEXT,
             status TEXT DEFAULT 'SCHEDULED',
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
@@ -86,7 +87,6 @@ def init_db():
 def upsert_candidates_bulk(records: list[dict], time_str: str):
     conn = get_connection()
     cursor = conn.cursor()
-    # 단일 트랜잭션 벌크 인서트 (I/O 병목 원천 차단)
     with conn:
         for r in records:
             cursor.execute("""
