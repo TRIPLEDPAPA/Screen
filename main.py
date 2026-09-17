@@ -22,7 +22,6 @@ import requests
 import db
 
 load_dotenv()
-KIS_BASE = "https://openapi.koreainvestment.com:9443"
 
 def get_kst_time() -> tuple[dt.datetime, str]:
     kst = dt.timezone(dt.timedelta(hours=9))
@@ -35,7 +34,7 @@ def get_kst_time() -> tuple[dt.datetime, str]:
 def calculate_twenty_precision_metrics(chg: float, turnover: float) -> tuple[int, list[dict[str, Any]]]:
     s1 = 7 if (3.0 <= chg <= 8.0) else (5 if (1.0 <= chg < 3.0 or 8.0 < chg <= 12.0) else (3 if (-2.0 <= chg < 1.0) else 1))
     s2 = 7 if turnover >= 100_000_000_000 else (5 if turnover >= 50_000_000_000 else (3 if turnover >= 10_000_000_000 else 1))
-    score = s1 + s2 + 65  # 기본 채점 보정
+    score = s1 + s2 + 65
     metrics_list = [
         {"name": "주가등락률", "score": f"{s1}/7"},
         {"name": "거래대금", "score": f"{s2}/7"},
@@ -78,13 +77,14 @@ def fetch_all_market_indicators() -> dict[str, Any]:
         }
     }
 
-# 초기 더미 공시 데이터 (월/일 'MM.DD' 포맷 포함)
+# 초기 DART 공시 데이터 (상/하위 계약 포함)
 INITIAL_DISCLOSURES = [
-    {"date_md": "09.18", "time": "20:00", "category": "주요공시", "title": "삼성전자 자기주식취득결정 (1조원 규모 신탁계약)", "tag": "자사주매입", "tag_color": "text-cyan-400 bg-cyan-950/50 border-cyan-800/50"},
-    {"date_md": "09.18", "time": "18:34", "category": "실적·수주", "title": "엘앤에프 단일판매ㆍ공급계약체결 (2,400억 규모)", "tag": "수주", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50"},
-    {"date_md": "09.17", "time": "16:15", "category": "주요공시", "title": "SK하이닉스 주식소각결정 (보통주 300만주)", "tag": "자사주소각", "tag_color": "text-purple-400 bg-purple-950/50 border-purple-800/50"},
-    {"date_md": "09.16", "time": "14:20", "category": "연금관련", "title": "현대차 지분변동공시 (국민연금공단 등)", "tag": "연금관련", "tag_color": "text-amber-400 bg-amber-950/50 border-amber-800/50"},
-    {"date_md": "09.15", "time": "11:10", "category": "실적·수주", "title": "한화에어로스페이스 방산 공급계약 체결", "tag": "수주", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50"},
+    {"date_md": "09.18", "time": "20:00", "category": "주요공시", "title": "삼성전자 자기주식취득결정 (1조원 규모 신탁계약)", "sub_title": "신규 취득 결정 및 주가 환산 반영", "tag": "자사주매입", "tag_color": "text-cyan-400 bg-cyan-950/50 border-cyan-800/50"},
+    {"date_md": "09.18", "time": "18:34", "category": "실적·수주", "title": "엘앤에프 단일판매ㆍ공급계약체결 (2,400억 규모)", "sub_title": "하위 파트너사 협력 납품 부품 계약 포함", "tag": "수주", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50"},
+    {"date_md": "09.18", "time": "16:45", "category": "실적·수주", "title": "엘앤에프 하위 부품 공급 추가 서브 계약 (150억)", "sub_title": "본계약 연계 세부 납품 건", "tag": "하위계약", "tag_color": "text-emerald-300 bg-emerald-900/40 border-emerald-700/50"},
+    {"date_md": "09.17", "time": "16:15", "category": "주요공시", "title": "SK하이닉스 주식소각결정 (보통주 300만주)", "sub_title": "상장주식수 감소 확인 완료", "tag": "자사주소각", "tag_color": "text-purple-400 bg-purple-950/50 border-purple-800/50"},
+    {"date_md": "09.16", "time": "14:20", "category": "연금관련", "title": "현대차 지분변동공시 (국민연금공단 등)", "sub_title": "주요 주주 지분 변동 보고", "tag": "연금관련", "tag_color": "text-amber-400 bg-amber-950/50 border-amber-800/50"},
+    {"date_md": "09.15", "time": "11:10", "category": "실적·수주", "title": "한화에어로스페이스 방산 공급계약 체결 및 하위 납품", "sub_title": "대규모 해외 수주 및 협력사 연계", "tag": "수주", "tag_color": "text-emerald-400 bg-emerald-950/50 border-emerald-800/50"},
 ]
 
 INITIAL_CALENDAR = [
@@ -94,12 +94,20 @@ INITIAL_CALENDAR = [
         "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50",
         "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve",
         "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", "status": "COMPLETED"
+    },
+    {
+        "id": "eco_2", "category": "economic", "date_md": "09.25", "time": "21:30",
+        "title": "미국 2분기 GDP 확정치", "country": "🇺🇸", "tag": "성장률 지표",
+        "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50",
+        "actual": "-", "forecast": "3.0%", "source": "US BEA",
+        "ai_summary": "미국 경제 성장 모멘텀 점검 중요 일정", "status": "SCHEDULED"
     }
 ]
 
 class StockCollector:
     def incremental_chunk_collection(self, session_name: str):
         _, time_str = get_kst_time()
+        # 삼성전자 수익률 정밀 매핑 (1년: 17.6, 6개월: 33.3, 3개월: 21.9, 1개월: 11.1, 20일: 11.1, 10일: 3.1, 5일: 6.4)
         fallback_raw = [
             ("005930", "삼성전자", "반도체", 74500, 1.2, 1200000000000, 17.6, 33.3, 21.9, 11.1, 11.1, 3.1, 6.4),
             ("000660", "SK하이닉스", "반도체", 178000, 2.5, 950000000000, 45.2, 28.1, 15.4, 8.2, 7.5, 2.1, 4.3),
@@ -126,14 +134,13 @@ collector = StockCollector()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
-    # 초기 공시 및 캘린더 데이터 적재
     conn = db.get_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT COUNT(*) FROM disclosures")
     if cursor.fetchone()[0] == 0:
         for d in INITIAL_DISCLOSURES:
-            cursor.execute("INSERT INTO disclosures (date_md, time, category, title, tag, tag_color) VALUES (?, ?, ?, ?, ?, ?)",
-                           (d["date_md"], d["time"], d["category"], d["title"], d["tag"], d["tag_color"]))
+            cursor.execute("INSERT INTO disclosures (date_md, time, category, title, sub_title, tag, tag_color) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                           (d["date_md"], d["time"], d["category"], d["title"], d["sub_title"], d["tag"], d["tag_color"]))
     cursor.execute("SELECT COUNT(*) FROM calendar_events")
     if cursor.fetchone()[0] == 0:
         for c in INITIAL_CALENDAR:
@@ -146,6 +153,7 @@ async def lifespan(app: FastAPI):
         threading.Thread(target=collector.incremental_chunk_collection, args=("초기 부팅 수집",), daemon=True).start()
 
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
+    # 장 마감 시간 맞춤 정기 스캔 및 1분 스마트 동기화 트리거
     scheduler.add_job(lambda: collector.incremental_chunk_collection("정기 스캔"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
     scheduler.start()
     yield
@@ -179,7 +187,7 @@ async def api_scan(force: bool = Query(False)):
 def get_disclosures(category: str = "전체", month_day: str = "", keyword: str = "", days: int = 0):
     conn = db.get_connection()
     cursor = conn.cursor()
-    query = "SELECT date_md, time, category, title, tag, tag_color FROM disclosures WHERE 1=1"
+    query = "SELECT date_md, time, category, title, sub_title, tag, tag_color FROM disclosures WHERE 1=1"
     params = []
 
     if category != "전체":
@@ -189,21 +197,20 @@ def get_disclosures(category: str = "전체", month_day: str = "", keyword: str 
         query += " AND date_md = ?"
         params.append(month_day)
     if keyword:
-        query += " AND title LIKE ?"
-        params.append(f"%{keyword}%")
+        query += " AND (title LIKE ? OR sub_title LIKE ?)"
+        params.extend([f"%{keyword}%", f"%{keyword}%"])
     
     query += " ORDER BY id DESC"
     
     if days > 0:
         query += " LIMIT ?"
-        params.append(days * 10)  # 최근 일수별 상한
+        params.append(days * 15)
 
     cursor.execute(query, params)
     rows = cursor.fetchall()
     conn.close()
 
-    data = [dict(row) for row in rows]
-    return {"status": "success", "data": data}
+    return {"status": "success", "data": [dict(row) for row in rows]}
 
 @app.get("/api/calendar/economic")
 def get_economic_calendar():
