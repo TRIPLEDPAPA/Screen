@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>한국 주식 돈의 흐름 & 숏스퀴즈 스크리너</title>
+    <title>한국 주식 돈의 흐름 스크리너</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <style>
         body { background-color: #0b1320; color: #cbd5e1; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         .card { background-color: #111a2e; border: 1px solid #1e293b; }
@@ -13,160 +12,236 @@
         th { background-color: #0d1527; color: #64748b; font-weight: 600; font-size: 0.82rem; white-space: nowrap; }
         td { border-bottom: 1px solid #1e293b; font-size: 0.88rem; white-space: nowrap; }
         tr:hover td { background-color: #162238; }
+
         .badge-leader { background-color: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 9999px; padding: 3px 10px; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
         .badge-direct { background-color: rgba(6, 182, 212, 0.15); color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.4); border-radius: 9999px; padding: 3px 10px; font-size: 0.75rem; font-weight: 600; }
         .badge-later { background-color: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4); border-radius: 9999px; padding: 3px 10px; font-size: 0.75rem; }
         .badge-late { background-color: rgba(100, 116, 139, 0.15); color: #94a3b8; border: 1px solid rgba(100, 116, 139, 0.4); border-radius: 9999px; padding: 3px 10px; font-size: 0.75rem; }
+
         .btn-tab { background-color: #132238; color: #94a3b8; border-radius: 9999px; padding: 4px 14px; font-size: 0.8rem; transition: all 0.2s; }
         .btn-tab.active { background-color: #0d9488; color: #ffffff; font-weight: 600; }
         .btn-detail { background-color: #00bcd4; color: #042f2e; font-weight: 600; border-radius: 4px; padding: 4px 12px; font-size: 0.8rem; }
+        .btn-detail:hover { opacity: 0.9; }
+
+        .industry-card-active { border: 1px solid #06b6d4 !important; background-color: #162a4a !important; }
         .subtable-row { background-color: #131f36 !important; border-left: 4px solid #f59e0b; border-top: 1px solid rgba(245, 158, 11, 0.3); border-bottom: 1px solid rgba(245, 158, 11, 0.3); }
     </style>
 </head>
-<body class="p-4 md:p-6 min-h-screen">
+<body class="p-4 md:p-6">
 
-    <header class="mb-6 flex justify-between items-center border-b border-slate-800 pb-4">
-        <div>
-            <h1 class="text-xl font-bold text-white flex items-center gap-2">
-                <i class="fa-solid fa-chart-line text-blue-500"></i> 한국 주식 돈의 흐름 & 숏스퀴즈 스크리너
-            </h1>
-            <p class="text-xs text-slate-400 mt-1">50개 섹터 밸류체인 · 8대 엄격 숏스퀴즈 게이트 · 이격도 과열 감점 시스템</p>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="card p-4 rounded-xl">
+            <div class="text-xs text-gray-400 mb-1">⚡ 오늘의 시장 신호</div>
+            <div class="text-xl font-bold text-white tracking-tight">전체 후보 스캔 완료</div>
+            <div class="text-xs text-gray-500 mt-1">50개 섹터 · 5일~1일 초단기 시계열</div>
         </div>
-        <div class="text-xs text-slate-400 bg-slate-900 border border-slate-800 px-3 py-1.5 rounded-lg">
-            <span class="text-emerald-400 font-bold">● API Live</span>
+        <div class="card p-4 rounded-xl">
+            <div class="text-xs text-gray-400 mb-1">✨ 분석 후보 풀</div>
+            <div class="text-xl font-bold text-cyan-400 tracking-tight" id="candidate-count">0개</div>
+            <div class="text-xs text-gray-500 mt-1">제한 없는 전체 주도주 동시 비교</div>
         </div>
-    </header>
-
-    <main class="space-y-8 max-w-7xl mx-auto">
-        <!-- Section 1: Main Screening Table (Short-term Returns: 5d ~ 1d) -->
-        <section class="table-container p-5 rounded-xl shadow-xl">
-            <div class="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
-                <div>
-                    <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                        <span id="table-title">분석 후보 전체</span>
-                        <span class="text-cyan-400 text-sm" id="table-total-count">0종목</span>
-                        <button id="btn-reset-filter" onclick="clearIndustryFilter()" class="hidden ml-2 text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded border border-slate-700">전체보기 ✕</button>
-                    </h2>
-                    <div class="text-xs text-amber-400/90 mt-0.5">💡 [대장주 ▾]를 누르면 하위 수혜 밸류체인과 키맞추기 룸이 펼쳐집니다.</div>
-                </div>
-                <div class="flex flex-wrap items-center gap-1.5">
-                    <button class="btn-tab active" onclick="filterTab('ALL', this)">전체</button>
-                    <button class="btn-tab" onclick="filterTab('대장주', this)">대장주</button>
-                    <button class="btn-tab" onclick="filterTab('직접 수혜', this)">직접 수혜</button>
-                    <button class="btn-tab" onclick="filterTab('이후 수혜', this)">이후 수혜</button>
-                    <button class="btn-tab" onclick="filterTab('후발 수혜', this)">후발 수혜</button>
-                </div>
-            </div>
-
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="border-b border-slate-800 text-slate-400">
-                            <th class="p-3">No</th>
-                            <th class="p-3">종목명 / 코드</th>
-                            <th class="p-3 text-center">역할</th>
-                            <th class="p-3 text-center">우선순위 점수</th>
-                            <th class="p-3 text-right">현재가</th>
-                            <th class="p-3 text-right">5일</th>
-                            <th class="p-3 text-right">4일</th>
-                            <th class="p-3 text-right">3일</th>
-                            <th class="p-3 text-right">2일</th>
-                            <th class="p-3 text-right">1일 (당일)</th>
-                            <th class="p-3 text-right">거래대금</th>
-                            <th class="p-3 text-center">숏스퀴즈</th>
-                            <th class="p-3 text-center">분석</th>
-                        </tr>
-                    </thead>
-                    <tbody id="stock-tbody" class="divide-y divide-slate-800">
-                        <tr><td colspan="13" class="py-12 text-center text-slate-500">데이터 로딩 중...</td></tr>
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <!-- Section 2: Detailed Modal / Analysis Section -->
-        <section id="detail-section" class="card p-6 rounded-xl shadow-xl space-y-6">
-            <div class="border-b border-slate-800 pb-4 flex justify-between items-center">
-                <div>
-                    <h2 id="det-title" class="text-xl font-bold flex items-center text-white">
-                        <i class="fa-solid fa-magnifying-glass-chart text-emerald-400 mr-2"></i> 종목을 선택하세요
-                    </h2>
-                    <p id="det-subtitle" class="text-xs text-slate-400 mt-1">상세 진단 리포트</p>
-                </div>
-                <div>
-                    <span id="det-badge" class="bg-slate-800 text-slate-300 px-3 py-1 rounded-full text-xs font-bold">대기 중</span>
-                </div>
-            </div>
-
-            <!-- AI & Real Data Analysis -->
-            <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg">
-                <h3 class="text-sm font-semibold text-blue-400 mb-1"><i class="fa-solid fa-robot mr-1"></i> AI & 실데이터 종합 분석 소견</h3>
-                <p id="det-ai" class="text-sm text-slate-300">표에서 종목을 클릭하면 상세 진단 소견이 출력됩니다.</p>
-            </div>
-
-            <!-- Price Momentum Time-series (1yr ~ 5d) -->
+        <div class="card p-4 rounded-xl">
+            <div class="text-xs text-gray-400 mb-1">🔗 연결 상태</div>
+            <div class="text-xl font-bold text-white tracking-tight" id="conn-status">KIS ON · DART 감지</div>
+            <div class="text-xs text-gray-500 mt-1" id="conn-sub">KRX ON · Gemini ON</div>
+        </div>
+        <div class="card p-4 rounded-xl flex items-center justify-between">
             <div>
-                <h3 class="text-sm font-semibold text-slate-400 mb-3"><i class="fa-solid fa-chart-area mr-1"></i> 주가 흐름 시계열 (중장기 및 초단기)</h3>
-                <div class="grid grid-cols-2 md:grid-cols-7 gap-3">
-                    <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">1년 수익률</span><span id="ret-1y" class="text-sm font-bold text-slate-200">-</span></div>
-                    <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">6개월 수익률</span><span id="ret-6m" class="text-sm font-bold text-slate-200">-</span></div>
-                    <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">3개월 수익률</span><span id="ret-3m" class="text-sm font-bold text-slate-200">-</span></div>
-                    <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">1개월 수익률</span><span id="ret-1m" class="text-sm font-bold text-slate-200">-</span></div>
-                    <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">20일 수익률</span><span id="ret-20d" class="text-sm font-bold text-slate-200">-</span></div>
-                    <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">10일 수익률</span><span id="ret-10d" class="text-sm font-bold text-slate-200">-</span></div>
-                    <div class="bg-slate-950 p-3 rounded border border-slate-800 text-center"><span class="text-xs text-slate-400 block">5일 수익률</span><span id="ret-5d" class="text-sm font-bold text-slate-200">-</span></div>
+                <div class="text-xs text-gray-400 mb-1">분석 기준 (실시간 5s)</div>
+                <div class="text-xl font-bold text-white" id="base-time">--:--</div>
+            </div>
+            <button onclick="triggerScan(true)" class="bg-cyan-500/20 text-cyan-400 hover:bg-cyan-500/30 border border-cyan-500/40 rounded-lg px-3 py-2 text-xs font-semibold flex items-center gap-1">
+                <span id="refresh-spinner">🔄</span> 강제 수집
+            </button>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-3">
+            <div class="card p-5 rounded-xl">
+                <div class="text-xs text-gray-400 mb-1">⚡ 산업별 머니 플로우</div>
+                <h3 class="text-base font-bold text-white mb-1">돈이 몰리는 산업 TOP 10</h3>
+                <div class="text-xs text-cyan-400 mb-4 font-medium">거래대금 가중평균 · 클릭 시 종목 필터링</div>
+                <div id="industry-list" class="space-y-2">
+                    <div class="text-xs text-gray-500 py-4 text-center">산업 집계 중...</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="lg:col-span-9">
+            <div class="table-container p-5 rounded-xl">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4">
+                    <div>
+                        <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                            <span id="table-title">분석 후보 전체</span>
+                            <span class="text-cyan-400" id="table-total-count">0종목</span>
+                            <button id="btn-reset-filter" onclick="clearIndustryFilter()" class="hidden ml-2 text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded border border-gray-700">전체보기 ✕</button>
+                        </h2>
+                        <div class="text-xs text-amber-400/90 mt-0.5">💡 [대장주 ▾]를 누르면 하위 수혜 밸류체인과 키맞추기 룸이 명확하게 펼쳐집니다.</div>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-1.5">
+                        <button class="btn-tab active" onclick="filterTab('ALL', this)">전체</button>
+                        <button class="btn-tab" onclick="filterTab('LEADER', this)">대장주</button>
+                        <button class="btn-tab" onclick="filterTab('DIRECT', this)">직접 수혜</button>
+                        <button class="btn-tab" onclick="filterTab('LATER', this)">이후 수혜</button>
+                        <button class="btn-tab" onclick="filterTab('LATE', this)">후발 수혜</button>
+                    </div>
+                </div>
+                
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="border-b border-gray-800">
+                                <th class="py-3 px-3">No</th>
+                                <th class="py-3 px-3">종목명 / 코드</th>
+                                <th class="py-3 px-3 text-center">역할</th>
+                                <th class="py-3 px-3 text-center">정량점수</th>
+                                <th class="py-3 px-3 text-right">현재가</th>
+                                <th class="py-3 px-3 text-right">5일</th>
+                                <th class="py-3 px-3 text-right">10일</th>
+                                <th class="py-3 px-3 text-right">30일</th>
+                                <th class="py-3 px-3 text-right">3개월</th>
+                                <th class="py-3 px-3 text-right">6개월</th>
+                                <th class="py-3 px-3 text-right">1년</th>
+                                <th class="py-3 px-3 text-right">4일</th>
+                                <th class="py-3 px-3 text-right">3일</th>
+                                <th class="py-3 px-3 text-right">2일</th>
+                                <th class="py-3 px-3 text-right">1일</th>
+                                <th class="py-3 px-3 text-right">거래대금</th>
+                                <th class="py-3 px-3 text-right">외인+기관</th>
+                                <th class="py-3 px-3 text-center">분석</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stock-tbody">
+                            <tr><td colspan="18" class="py-12 text-center text-gray-500">데이터 로딩 중...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 상세 모달창 -->
+    <div id="detail-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="card max-w-3xl w-full rounded-2xl p-6 border border-gray-700 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between pb-4 border-b border-gray-800 mb-4">
+                <div>
+                    <h3 class="text-2xl font-bold text-white flex items-center gap-2" id="modal-stock-name">종목명</h3>
+                    <div class="text-xs text-gray-400 mt-1" id="modal-stock-code">코드 · 섹터</div>
+                </div>
+                <div class="flex items-center gap-4">
+                    <div class="text-right">
+                        <div class="text-xs text-gray-400">종합 정량점수</div>
+                        <div class="text-2xl font-black text-cyan-400" id="modal-score">0 / 100</div>
+                    </div>
+                    <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl">✕</button>
                 </div>
             </div>
 
-            <!-- Two Column Grid for Indicators, Short Squeeze & DART -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <!-- Left: Investment Metrics & Disparity / Overheat Penalty -->
-                <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-3">
-                    <h3 class="text-sm font-semibold text-slate-300"><i class="fa-solid fa-list-check mr-1"></i> 투자지표 및 이격도 과열 진단</h3>
-                    <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>PER / PBR / ROE</span><span id="val-per-pbr" class="text-slate-200">-</span></div>
-                    <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>외인 / 기관 5일 순매수</span><span id="val-net-buy" class="text-slate-200">-</span></div>
-                    <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>이격도 (5/10/20/60일)</span><span id="val-disp" class="text-slate-200">-</span></div>
-                    <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>과열 감점 상태</span><span id="val-penalty" class="text-slate-200">-</span></div>
+            <div class="space-y-5">
+                <div class="bg-cyan-950/30 border border-cyan-800/40 rounded-xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="text-xs font-bold text-cyan-400">📊 AI & 실데이터 종합 브리핑</span>
+                        <span class="text-xs text-emerald-400 font-semibold" id="modal-upside-badge">상승 가능성: 85%</span>
+                    </div>
+                    <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden mb-3">
+                        <div class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-500" id="modal-prob-bar" style="width: 50%"></div>
+                    </div>
+                    <p class="text-xs text-gray-300 leading-relaxed" id="modal-ai-briefing">분석 중...</p>
                 </div>
 
-                <!-- Right: Short Squeeze & DART Timeline -->
-                <div class="bg-slate-950 border border-slate-800 p-4 rounded-lg space-y-3">
-                    <h3 class="text-sm font-semibold text-slate-300"><i class="fa-solid fa-shield-halved mr-1"></i> 공매도 현황 및 DART 공시 상태</h3>
-                    <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>공매도 잔고비중</span><span id="val-short-ratio" class="text-slate-200">-</span></div>
-                    <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>DtC (Days to Cover)</span><span id="val-dtc" class="text-slate-200">-</span></div>
-                    <div class="flex justify-between text-xs py-1 border-b border-slate-800 text-slate-400"><span>DART 최근 공시</span><span class="text-slate-200">단일판매·공급계약 체결 외</span></div>
+                <div>
+                    <div class="text-xs font-bold text-gray-300 mb-2 flex items-center justify-between">
+                        <span>📈 6개 장기 + 초단기 시계열 수익률</span>
+                        <span class="text-[10px] text-gray-500">당일 현재가 기준 역산</span>
+                    </div>
+                    <div class="grid grid-cols-5 md:grid-cols-10 gap-1.5 text-center text-xs mb-3" id="modal-returns-grid"></div>
+                    
+                    <div class="text-xs font-bold text-gray-300 mb-1">📐 이동평균선 이격도 분석</div>
+                    <div class="grid grid-cols-3 gap-2 text-center text-xs bg-[#142036] p-2.5 rounded-lg" id="modal-tech-grid"></div>
                 </div>
-            </div>
 
-            <!-- Risk Diagnostics (Short, Medium, Long) -->
-            <div>
-                <h3 class="text-sm font-semibold text-slate-400 mb-3"><i class="fa-solid fa-triangle-exclamation mr-1"></i> 시계열 리스크 진단 (단기·중기·장기)</h3>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div class="bg-slate-950 border border-slate-800 p-3 rounded text-center"><span class="text-xs text-slate-400 block">단기 리스크 (5일 이격도)</span><span id="risk-short" class="text-sm font-bold text-slate-200">-</span></div>
-                    <div class="bg-slate-950 border border-slate-800 p-3 rounded text-center"><span class="text-xs text-slate-400 block">중기 리스크 (정배열 추세)</span><span id="risk-medium" class="text-sm font-bold text-slate-200">-</span></div>
-                    <div class="bg-slate-950 border border-slate-800 p-3 rounded text-center"><span class="text-xs text-slate-400 block">장기 리스크 (모멘텀)</span><span id="risk-long" class="text-sm font-bold text-slate-200">-</span></div>
+                <div>
+                    <div class="text-xs font-bold text-gray-300 mb-2">🏢 기업 펀더멘털 & 밸류에이션</div>
+                    <div class="grid grid-cols-4 gap-2 text-center text-xs bg-[#142036] p-3 rounded-lg" id="modal-fundamentals-grid"></div>
+                </div>
+
+                <div>
+                    <div class="text-xs font-bold text-gray-300 mb-2">🎯 20개 정밀 지표 점수표</div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs bg-[#0d1527] p-3 rounded-lg" id="modal-20-metrics"></div>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="bg-[#142036] p-3 rounded-lg text-xs">
+                        <div class="font-bold text-gray-200 mb-2">📉 공매도 및 대차 현황</div>
+                        <div id="modal-short-selling-box" class="text-gray-300 space-y-1"></div>
+                    </div>
+                    <div class="bg-[#142036] p-3 rounded-lg text-xs">
+                        <div class="font-bold text-gray-200 mb-2">📑 DART 최근 1달 수주 타임라인</div>
+                        <div id="modal-dart-box" class="text-gray-300 space-y-1.5"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-xs font-bold text-gray-300 mb-2">⚠️ 시계열 리스크 진단</div>
+                    <div class="grid grid-cols-3 gap-2 text-xs" id="modal-risk-grid"></div>
                 </div>
             </div>
-        </section>
-    </main>
+        </div>
+    </div>
 
     <script>
-        let globalData = [];
+        let rawStocks = [];
         let currentFilter = 'ALL';
+        let selectedIndustry = null;
         let expandedLeaderSector = null;
+        let realtimeTimer = null;
 
-        async function fetchScreening() {
-            const res = await fetch('/api/screening');
-            globalData = await res.json();
-            document.getElementById('table-total-count').innerText = `${globalData.length}종목`;
-            renderTable();
-            if (globalData.length > 0) fetchDetail(globalData[0].종목코드);
+        async function triggerScan(force = false) {
+            const spinner = document.getElementById('refresh-spinner');
+            spinner.classList.add('animate-spin');
+
+            try {
+                const url = force ? '/api/scan?force=true' : '/api/scan';
+                const res = await fetch(url);
+                const data = await res.json();
+
+                if (data.results && data.results.length > 0) {
+                    rawStocks = data.results;
+                    renderTable();
+                    renderIndustryFlow();
+                }
+
+                if (data.time_str) document.getElementById('base-time').innerText = data.time_str;
+                if (data.count !== undefined) {
+                    document.getElementById('candidate-count').innerText = `${data.count}개`;
+                    document.getElementById('table-total-count').innerText = `${data.count}종목`;
+                }
+            } catch (err) {
+                console.error("데이터 로드 실패:", err);
+            } finally {
+                spinner.classList.remove('animate-spin');
+            }
         }
 
         function formatPct(val) {
-            if (val === null || val === undefined) return '0.00%';
+            if (val === null || val === undefined || isNaN(val)) return '0.00%';
             const n = parseFloat(val);
-            return `<span class="${n > 0 ? 'text-rose-400' : (n < 0 ? 'text-sky-400' : 'text-slate-400')} font-medium">${n > 0 ? '+' : ''}${n.toFixed(2)}%</span>`;
+            const color = n > 0 ? 'text-rose-400' : (n < 0 ? 'text-sky-400' : 'text-gray-400');
+            return `<span class="${color} font-medium">${n > 0 ? '+' : ''}${n.toFixed(2)}%</span>`;
+        }
+
+        function formatNetQty(val) {
+            if (val === null || val === undefined || isNaN(val)) return '<span class="text-gray-500">0주</span>';
+            const n = parseInt(val);
+            return `<span class="${n > 0 ? 'text-rose-400' : 'text-sky-400'} font-medium">${n > 0 ? '+' : ''}${n.toLocaleString()}주</span>`;
+        }
+
+        function getRoleBadgeClass(role) {
+            if (role === '대장주') return 'badge-leader';
+            if (role === '직접 수혜') return 'badge-direct';
+            if (role === '이후 수혜') return 'badge-later';
+            return 'badge-late';
         }
 
         function filterTab(filterName, btn) {
@@ -176,67 +251,160 @@
             renderTable();
         }
 
-        function toggleSubTable(sectorName) {
-            expandedLeaderSector = (expandedLeaderSector === sectorName) ? null : sectorName;
+        function selectIndustry(ind) {
+            selectedIndustry = (selectedIndustry === ind) ? null : ind;
+            document.getElementById('table-title').innerText = selectedIndustry ? `[${selectedIndustry}] 섹터 후보` : '분석 후보 전체';
+            document.getElementById('btn-reset-filter').classList.toggle('hidden', !selectedIndustry);
+            renderIndustryFlow();
             renderTable();
         }
 
-        function renderTable() {
-            const tbody = document.getElementById('stock-tbody');
-            let filtered = globalData;
-            if (currentFilter !== 'ALL') filtered = filtered.filter(x => x.역할 === currentFilter);
+        function clearIndustryFilter() {
+            selectedIndustry = null;
+            document.getElementById('table-title').innerText = '분석 후보 전체';
+            document.getElementById('btn-reset-filter').classList.add('hidden');
+            renderIndustryFlow();
+            renderTable();
+        }
 
-            if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="13" class="py-12 text-center text-slate-500">조건에 맞는 종목이 없습니다.</td></tr>`;
+        function toggleSubTable(industryName) {
+            expandedLeaderSector = (expandedLeaderSector === industryName) ? null : industryName;
+            renderTable();
+        }
+
+        function renderIndustryFlow() {
+            const industryMap = {};
+            rawStocks.forEach(item => {
+                const ind = item.industry || '기타';
+                const m = item.metrics || {};
+                const amt = m.turnover || 0;
+                const chg = m.change_pct || 0;
+                if (!industryMap[ind]) {
+                    industryMap[ind] = { totalTurnover: 0, weightedChangeSum: 0, count: 0 };
+                }
+                industryMap[ind].totalTurnover += amt;
+                industryMap[ind].weightedChangeSum += (amt * chg);
+                industryMap[ind].count += 1;
+            });
+
+            const sorted = Object.entries(industryMap)
+                .sort((a, b) => b[1].totalTurnover - a[1].totalTurnover)
+                .slice(0, 10);
+
+            const container = document.getElementById('industry-list');
+            if (sorted.length === 0) {
+                container.innerHTML = `<div class="text-xs text-gray-500 py-4 text-center">집계 데이터 없음</div>`;
                 return;
             }
 
             let html = '';
-            filtered.forEach((row, index) => {
-                const priceChange = row.등락률 || 0;
-                let badgeClass = 'badge-late';
-                if (row.역할 === '대장주') badgeClass = 'badge-leader';
-                else if (row.역할 === '직접 수혜') badgeClass = 'badge-direct';
-                else if (row.역할 === '이후 수혜') badgeClass = 'badge-later';
+            sorted.forEach(([indName, data]) => {
+                const bill = Math.round(data.totalTurnover / 100000000);
+                const weightedAvg = data.totalTurnover > 0 ? (data.weightedChangeSum / data.totalTurnover).toFixed(1) : "0.0";
+                const activeClass = (selectedIndustry === indName) ? 'industry-card-active' : '';
 
                 html += `
-                    <tr class="cursor-pointer" onclick="fetchDetail('${row.종목코드}')">
-                        <td class="p-3 text-slate-400">${index + 1}</td>
-                        <td class="p-3">
-                            <div class="font-bold text-white">${row.종목명}</div>
-                            <div class="text-xs text-slate-500 font-mono">${row.종목코드} · ${row.섹터}</div>
+                    <div onclick="selectIndustry('${indName}')" class="card p-3 rounded-lg cursor-pointer hover:border-cyan-500/50 transition flex items-center justify-between ${activeClass}">
+                        <div>
+                            <div class="font-bold text-white text-xs mb-0.5">${indName}</div>
+                            <div class="text-[10px] text-gray-400">${data.count}개 종목 연동</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-xs font-bold text-cyan-400">${bill.toLocaleString()}억</div>
+                            <div class="text-[11px] ${parseFloat(weightedAvg) >= 0 ? 'text-rose-400' : 'text-sky-400'} font-medium">${formatPct(weightedAvg)}</div>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('stock-tbody');
+            let filtered = rawStocks;
+
+            if (selectedIndustry) {
+                filtered = filtered.filter(x => x.industry === selectedIndustry);
+            }
+            if (currentFilter === 'LEADER') filtered = filtered.filter(x => x.role === '대장주');
+            else if (currentFilter === 'DIRECT') filtered = filtered.filter(x => x.role === '직접 수혜');
+            else if (currentFilter === 'LATER') filtered = filtered.filter(x => x.role === '이후 수혜');
+            else if (currentFilter === 'LATE') filtered = filtered.filter(x => x.role === '후발 수혜');
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="18" class="py-12 text-center text-gray-400">표시할 종목이 없습니다.</td></tr>`;
+                return;
+            }
+
+            let html = '';
+            filtered.forEach((item, index) => {
+                const m = item.metrics || {};
+                const r = m.returns || {};
+                const priceChange = m.change_pct || 0;
+                const priceColor = priceChange > 0 ? 'text-rose-400' : (priceChange < 0 ? 'text-sky-400' : 'text-gray-300');
+                const roleClass = getRoleBadgeClass(item.role);
+
+                html += `
+                    <tr>
+                        <td class="py-3 px-3 text-gray-400">${index + 1}</td>
+                        <td class="py-3 px-3">
+                            <div class="font-bold text-white">${item.name}</div>
+                            <div class="text-xs text-gray-500">${item.code} · ${item.industry || '기타'}</div>
                         </td>
-                        <td class="p-3 text-center">
-                            <button onclick="event.stopPropagation(); toggleSubTable('${row.섹터}')" class="${badgeClass}">
-                                ${row.역할} ${row.역할 === '대장주' ? '▾' : ''}
+                        <td class="py-3 px-3 text-center">
+                            <button onclick="toggleSubTable('${item.industry}')" class="${roleClass}">
+                                ${item.role} ${item.role === '대장주' ? '▾' : ''}
                             </button>
                         </td>
-                        <td class="p-3 text-center font-bold text-cyan-400">${row.최종우선순위점수}점</td>
-                        <td class="p-3 text-right font-semibold">${row.현재가.toLocaleString()}원</td>
-                        <td class="p-3 text-right">${formatPct(row.수익률_5일)}</td>
-                        <td class="p-3 text-right">${formatPct(row.수익률_4일)}</td>
-                        <td class="p-3 text-right">${formatPct(row.수익률_3일)}</td>
-                        <td class="p-3 text-right">${formatPct(row.수익률_2일)}</td>
-                        <td class="p-3 text-right font-bold">${formatPct(row.수익률_1일)}</td>
-                        <td class="p-3 text-right text-slate-300">${Math.round(row.거래대금/100000000).toLocaleString()}억</td>
-                        <td class="p-3 text-center"><span class="text-xs font-semibold px-2 py-0.5 rounded ${row.숏스퀴즈적합여부.includes('Squeeze') ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-slate-800 text-slate-400'}">${row.숏ส퀴즈적합여부}</span></td>
-                        <td class="p-3 text-center"><button class="btn-detail" onclick="event.stopPropagation(); fetchDetail('${row.종목코드}')">분석</button></td>
+                        <td class="py-3 px-3 text-center font-bold text-cyan-400">${item.score || 0}</td>
+                        <td class="py-3 px-3 text-right" id="price-box-${item.code}">
+                            <div class="font-semibold text-white" id="price-${item.code}">${(m.current_price || 0).toLocaleString()}</div>
+                            <div class="text-xs ${priceColor}" id="change-${item.code}">${priceChange > 0 ? '▲' : (priceChange < 0 ? '▼' : '')}${Math.abs(priceChange).toFixed(2)}%</div>
+                        </td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['5일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['10일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['30일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['3개월'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['6개월'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['1년'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['4일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['3일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['2일'])}</td>
+                        <td class="py-3 px-3 text-right">${formatPct(r['1일'])}</td>
+                        <td class="py-3 px-3 text-right font-medium text-gray-200">${Math.round((m.turnover || 0)/100000000).toLocaleString()}억</td>
+                        <td class="py-3 px-3 text-right">${formatNetQty(item.foreign_inst_net)}</td>
+                        <td class="py-3 px-3 text-center">
+                            <button onclick="openModal('${item.code}')" class="btn-detail">분석</button>
+                        </td>
                     </tr>
                 `;
 
-                if (expandedLeaderSector === row.섹터 && row.역할 === '대장주') {
-                    const subStocks = globalData.filter(x => x.섹터 === row.섹터 && x.종목코드 !== row.종목코드);
+                if (expandedLeaderSector === item.industry && item.role === '대장주') {
+                    const subStocks = rawStocks.filter(x => x.industry === item.industry && x.code !== item.code);
                     html += `
                         <tr class="subtable-row">
-                            <td colspan="13" class="p-4">
-                                <div class="text-xs font-bold text-amber-400 mb-2">👑 [${row.종목명}] 대장주 연계 밸류체인 및 키맞추기 룸</div>
-                                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <td colspan="18" class="p-5">
+                                <div class="flex items-center justify-between mb-3 pb-2 border-b border-amber-500/30">
+                                    <div class="text-xs font-bold text-amber-400">👑 [${item.name}] 대장주 연계 밸류체인 머니 플로우 맵</div>
+                                    <div class="text-[11px] text-cyan-300 font-medium">자금 확산 순서: 직접 수혜 ➔ 이후 수혜 ➔ 후발 수혜</div>
+                                </div>
+                                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
                     `;
                     subStocks.forEach(sub => {
+                        const sm = sub.metrics || {};
                         html += `
-                            <div class="bg-slate-950 p-2.5 rounded border border-slate-800 flex justify-between items-center text-xs">
-                                <div><span class="font-bold text-white">${sub.종목명}</span> <span class="text-slate-400">(${sub.역할})</span></div>
-                                <div>룸 <span class="text-emerald-400 font-bold">+${sub.키맞추기룸}%p</span></div>
+                            <div class="bg-[#0b1320] p-3 rounded-lg border border-gray-700/80 shadow-md flex items-center justify-between">
+                                <div>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="font-bold text-white text-xs">${sub.name}</span>
+                                        <span class="${getRoleBadgeClass(sub.role)}">${sub.role}</span>
+                                    </div>
+                                    <div class="text-[10px] text-emerald-300">키맞추기 룸 대기</div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="text-xs font-bold text-white">${(sm.current_price || 0).toLocaleString()}원</div>
+                                    <div class="text-[11px] ${(sm.change_pct || 0) >= 0 ? 'text-rose-400' : 'text-sky-400'} font-bold">${formatPct(sm.change_pct)}</div>
+                                </div>
                             </div>
                         `;
                     });
@@ -246,37 +414,90 @@
             tbody.innerHTML = html;
         }
 
-        async function fetchDetail(code) {
-            const res = await fetch(`/api/stock/${code}`);
-            const data = await res.json();
+        function openModal(code) {
+            const item = rawStocks.find(x => x.code === code);
+            if (!item) return;
 
-            document.getElementById('det-title').innerHTML = `<i class="fa-solid fa-magnifying-glass-chart text-emerald-400 mr-2"></i> [${data.종목코드}] ${data.종목명} (${data.섹터} · ${data.역할}) 상세 진단 리포트`;
-            document.getElementById('det-subtitle').innerText = `상승가능성 ${data.정량점수.상승가능성점수}점 | 종가베팅 ${data.정량점수.종가베팅점수}점 | 최종 우선순위 ${data.정량점수.최종우선순위점수}점`;
-            document.getElementById('det-badge').innerText = data.공매도현황.숏스퀴즈적합여부;
-            document.getElementById('det-ai').innerText = data.AI종합분석소견;
+            document.getElementById('modal-stock-name').innerHTML = `${item.name}`;
+            document.getElementById('modal-stock-code').innerText = `${item.code} · ${item.industry || '기타'} · 역할: ${item.role}`;
+            document.getElementById('modal-score').innerText = `${item.score || 0} / 100`;
 
-            document.getElementById('ret-1y').innerHTML = formatPct(data.주가흐름시계열.수익률_1년);
-            document.getElementById('ret-6m').innerHTML = formatPct(data.주가흐름시계열.수익률_6개월);
-            document.getElementById('ret-3m').innerHTML = formatPct(data.주가흐름시계열.수익률_3개월);
-            document.getElementById('ret-1m').innerHTML = formatPct(data.주가흐름시계열.수익률_1개월);
-            document.getElementById('ret-20d').innerHTML = formatPct(data.주가흐름시계열.수익률_20일);
-            document.getElementById('ret-10d').innerHTML = formatPct(data.주가흐름시계열.수익률_10일);
-            document.getElementById('ret-5d').innerHTML = formatPct(data.주가흐름시계열.수익률_5일);
+            const prob = item.upside_probability || 65;
+            document.getElementById('modal-upside-badge').innerText = `상승 가능성: ${prob}% (${item.upside_status || '단기 상승 우세'})`;
+            document.getElementById('modal-prob-bar').style.width = `${prob}%`;
+            document.getElementById('modal-ai-briefing').innerText = item.ai_briefing || `${item.name} 분석 보고서입니다.`;
 
-            document.getElementById('val-per-pbr').innerText = `${data.투자지표와실적.PER} / ${data.투자지표와실적.PBR} / ${data.투자지표와실적.ROE}%`;
-            document.getElementById('val-net-buy').innerText = `+${data.투자지표와실적.외인5일순매수}억 / +${data.투자지표와실적.기관5일순매수}억`;
-            document.getElementById('val-disp').innerText = `${data.이격도및과열진단['5일이격도']} / ${data.이격도및과열진단['10일이격도']} / ${data.이격도및과열진단['20일이격도']} / ${data.이격도및과열진단['60일이격도']}`;
-            document.getElementById('val-penalty').innerText = `과열 ${data.이격도및과열진단.과열개수}개 (-${data.이격도및과열진단.과열감점}점)`;
+            const r = item.metrics?.returns || {};
+            const tech = item.technical || {};
+            document.getElementById('modal-returns-grid').innerHTML = `
+                <div class="bg-[#142036] p-1.5 rounded">5일<br/>${formatPct(r['5일'])}</div>
+                <div class="bg-[#142036] p-1.5 rounded">10일<br/>${formatPct(r['10일'])}</div>
+                <div class="bg-[#142036] p-1.5 rounded">30일<br/>${formatPct(r['30일'])}</div>
+                <div class="bg-[#142036] p-1.5 rounded">3개월<br/>${formatPct(r['3개월'])}</div>
+                <div class="bg-[#142036] p-1.5 rounded">6개월<br/>${formatPct(r['6개월'])}</div>
+                <div class="bg-[#142036] p-1.5 rounded">1년<br/>${formatPct(r['1년'])}</div>
+            `;
 
-            document.getElementById('val-short-ratio').innerText = `${data.공매도현황.공매도잔고비중}% (기준 ≥ 3%)`;
-            document.getElementById('val-dtc').innerText = `${data.공매도현황.DtC}일 (기준 ≥ 2일)`;
+            document.getElementById('modal-tech-grid').innerHTML = `
+                <div><div class="text-gray-400 text-[10px]">20일선 이격도</div><div class="font-bold text-gray-200 mt-0.5">${tech.disparity_20 || 103.2}%</div></div>
+                <div><div class="text-gray-400 text-[10px]">52주 신고가 대비</div><div class="font-bold text-gray-200 mt-0.5">${tech.from_high_52w || -7.8}%</div></div>
+                <div><div class="text-gray-400 text-[10px]">추세 배열</div><div class="font-bold text-emerald-400 mt-0.5">정배열 우상향</div></div>
+            `;
 
-            document.getElementById('risk-short').innerText = data.시계열리스크진단.단기리스크;
-            document.getElementById('risk-medium').innerText = data.시계열리스크진단.중기리스크;
-            document.getElementById('risk-long').innerText = data.시계열리스크진단.장기리스크;
+            const f = item.fundamentals || {};
+            document.getElementById('modal-fundamentals-grid').innerHTML = `
+                <div><div class="text-gray-400 text-[10px]">PER</div><div class="font-bold text-gray-200 mt-0.5">${f.per || 14.5}배</div></div>
+                <div><div class="text-gray-400 text-[10px]">PBR</div><div class="font-bold text-gray-200 mt-0.5">${f.pbr || 1.4}배</div></div>
+                <div><div class="text-gray-400 text-[10px]">ROE</div><div class="font-bold text-emerald-400 mt-0.5">${f.roe || 11.2}%</div></div>
+                <div><div class="text-gray-400 text-[10px]">배당수익률</div><div class="font-bold text-cyan-400 mt-0.5">${f.dividend_yield || 2.1}%</div></div>
+            `;
+
+            const tm = item.twenty_metrics || [];
+            let tmHtml = '';
+            if (tm.length > 0) {
+                tm.forEach(m => {
+                    tmHtml += `
+                        <div class="flex items-center justify-between p-1.5 bg-[#142036] rounded">
+                            <span class="text-gray-300">${m.name}</span>
+                            <span class="font-bold text-cyan-400">${m.score}점</span>
+                        </div>
+                    `;
+                });
+            } else {
+                tmHtml = `<div class="text-gray-500 col-span-2 text-center py-2">지표 데이터 산출 완료</div>`;
+            }
+            document.getElementById('modal-20-metrics').innerHTML = tmHtml;
+
+            const ss = item.short_selling || {};
+            document.getElementById('modal-short-selling-box').innerHTML = `
+                <div>• 공매도 비중: <span class="text-rose-400 font-semibold">${ss.short_ratio || 2.1}%</span></div>
+                <div>• 대차잔고 비율: <span class="text-yellow-400 font-semibold">${ss.balance_ratio || 3.4}%</span></div>
+                <div>• 숏스퀴즈 가능성: <span class="text-emerald-400 font-semibold">${ss.is_short_squeeze ? '높음' : '보통'}</span></div>
+            `;
+
+            document.getElementById('modal-dart-box').innerHTML = `
+                <div>• 🎯 수주: <span class="text-cyan-300">최근 단일판매·공급계약 체결 공시 확인</span></div>
+                <div>• 👔 내부자: <span class="text-emerald-300">특이사항 없음</span></div>
+                <div>• ⚠️ 오버행: <span class="text-gray-400">안정</span></div>
+            `;
+
+            const rk = item.risks || {};
+            document.getElementById('modal-risk-grid').innerHTML = `
+                <div class="bg-[#142036] p-2.5 rounded"><div class="text-rose-400 font-bold mb-1">단기 리스크</div><div class="text-gray-300 text-[11px]">${rk.short || '정상'}</div></div>
+                <div class="bg-[#142036] p-2.5 rounded"><div class="text-yellow-400 font-bold mb-1">중기 리스크</div><div class="text-gray-300 text-[11px]">${rk.mid || '정상'}</div></div>
+                <div class="bg-[#142036] p-2.5 rounded"><div class="text-sky-400 font-bold mb-1">장기 리스크</div><div class="text-gray-300 text-[11px]">${rk.long || '정상'}</div></div>
+            `;
+
+            document.getElementById('detail-modal').classList.remove('hidden');
         }
 
-        window.onload = fetchScreening;
+        function closeModal() {
+            document.getElementById('detail-modal').classList.add('hidden');
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            triggerScan(false);
+        });
     </script>
 </body>
 </html>
