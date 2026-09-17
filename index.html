@@ -33,8 +33,8 @@
     <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">⚡ 시장 스캔 상태</div>
-            <div class="text-xl font-bold text-white tracking-tight">코스피·코스닥 광범위 스캔</div>
-            <div class="text-xs text-gray-500 mt-1">5초 실시간 틱 갱신 활성화</div>
+            <div class="text-xl font-bold text-white tracking-tight">전체 종목 풀 스캔 연동</div>
+            <div class="text-xs text-gray-500 mt-1">매월 1일 전종목 정기 스캔 반영</div>
         </div>
         <div class="card p-4 rounded-xl">
             <div class="text-xs text-gray-400 mb-1">✨ 분석 후보 풀</div>
@@ -110,9 +110,9 @@
                         <div class="text-xs text-amber-400/90 mt-0.5">정밀 종가베팅 점수 및 이격도 과열 감점 반영</div>
                     </div>
                     <div class="flex flex-wrap items-center gap-2">
-                        <!-- 종목 검색창 -->
+                        <!-- 강력한 종목검색 기능 (이름 또는 6자리 코드 실시간 매칭) -->
                         <div class="relative">
-                            <input type="text" id="stock-search-input" placeholder="🔍 종목명 또는 6자리 코드 검색..." oninput="handleSearch(this.value)" class="bg-[#0d1527] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 w-52" />
+                            <input type="text" id="stock-search-input" placeholder="🔍 종목명 또는 6자리 코드 검색..." oninput="handleSearch(this.value)" class="bg-[#0d1527] border border-gray-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500 w-56" />
                         </div>
                         <button class="btn-tab active" onclick="filterTab('ALL', this)">전체</button>
                         <button class="btn-tab" onclick="filterTab('LEADER', this)">대장주</button>
@@ -163,14 +163,13 @@
                     <p class="mt-1">• 5일·10일·20일·60일 이동평균선 이격도가 과열 구간(각 108, 112, 115, 130 이상)에 진입할 경우 충족 개수에 따라 -3점, -6점, -10점의 과열 감점이 적용됩니다.</p>
                 </div>
                 <div class="bg-[#142036] p-3 rounded-lg">
-                    <div class="font-bold text-cyan-400 mb-1 text-sm">2. 메인 테이블 시계열 및 수급</div>
-                    <p>• 단기 흐름은 가장 최근인 **[1일(당일) ~ 5일전]** 순서로 배치되어 있으며, 과거 실제 기준가격 대비 수학적 퍼센트 산식으로 표기됩니다.</p>
-                    <p class="mt-1">• 외국인·기관 수급은 종목별 거래대금과 특성에 맞춰 고유의 순매수 수량이 다채롭게 산출됩니다.</p>
+                    <div class="font-bold text-cyan-400 mb-1 text-sm">2. 전 종목 정기 스캔 및 검색</div>
+                    <p>• 매월 1일 코스피·코스닥 전 상장 종목 풀을 대상으로 대규모 정기 스캔이 자동 수행되어 데이터베이스에 영구 보존됩니다.</p>
+                    <p class="mt-1">• 상단 검색창에 종목명이나 6자리 코드를 입력하면 저장된 전체 종목 중 즉시 실시간 필터링됩니다.</p>
                 </div>
                 <div class="bg-[#142036] p-3 rounded-lg">
                     <div class="font-bold text-cyan-400 mb-1 text-sm">3. 실시간 틱 및 인터랙션</div>
-                    <p>• 상단 검색창에 종목명이나 6자리 코드를 입력하면 실시간으로 테이블이 필터링됩니다.</p>
-                    <p class="mt-1">• 좌측 '산업별 TOP 10' 항목을 클릭하면 해당 섹터 종목들만 모아볼 수 있으며, 5초마다 현재가가 실시간 틱으로 갱신됩니다.</p>
+                    <p>• 좌측 '산업별 TOP 10' 항목을 클릭하면 해당 섹터 종목들만 모아볼 수 있으며, 5초마다 현재가가 실시간 틱으로 갱신됩니다.</p>
                 </div>
             </div>
         </div>
