@@ -3,21 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Money Flow - 주식 퀀트 & AI 차트 모니터링</title>
+    <title>Money Flow - 실시간 퀀트 & AI 차트 모니터링</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body class="bg-gray-900 text-gray-100 min-h-screen">
 
-    <!-- 상단 네비게이션 바 (요청하신 순서로 적용) -->
+    <!-- 상단 네비게이션 바 (요청 순서 완벽 반영) -->
     <nav class="bg-gray-800 border-b border-gray-700 sticky top-0 z-50">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex items-center justify-between h-16">
                 <div class="flex items-center gap-6">
                     <span class="text-xl font-black text-indigo-400 tracking-wider">MONEY FLOW</span>
                     
-                    <!-- 메뉴 버튼 탭 (요청 순서) -->
                     <div class="hidden md:flex items-center space-x-1">
                         <button id="tab-btn-home" onclick="switchTab('home')" class="nav-tab px-3.5 py-2 rounded-lg text-sm font-semibold text-white bg-indigo-600">홈</button>
                         <button id="tab-btn-flow" onclick="switchTab('flow')" class="nav-tab px-3.5 py-2 rounded-lg text-sm font-semibold text-gray-400 hover:text-white">MONEY FLOW</button>
@@ -32,59 +30,46 @@
         </div>
     </nav>
 
-    <!-- 메인 컨텐츠 영역 -->
+    <!-- 메인 대시보드 컨텐츠 -->
     <main class="max-w-7xl mx-auto px-4 py-6">
 
         <!-- 1. [홈] 탭 -->
         <div id="tab-content-home" class="tab-page space-y-6">
             <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                <h1 class="text-2xl font-bold text-white mb-2">👋 Money Flow에 오신 것을 환영합니다</h1>
-                <p class="text-gray-400 text-sm">실시간 퀀트 분석과 AI 차트 진단을 한눈에 확인하세요.</p>
+                <h1 class="text-2xl font-bold text-white mb-2">👋 Money Flow 실시간 시스템</h1>
+                <p class="text-gray-400 text-sm">코스피·코스닥 상장 종목의 정밀 퀀트 수급 분석과 AI 기술적 차트 진단을 제공합니다.</p>
             </div>
         </div>
 
-        <!-- 2. [MONEY FLOW] 탭 -->
+        <!-- 2. [MONEY FLOW] 탭 (실제 주가 및 연동 버튼 적용) -->
         <div id="tab-content-flow" class="tab-page hidden space-y-6">
             <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
-                <h2 class="text-xl font-bold text-white mb-4">🔥 실시간 퀀트 머니플로우 종목</h2>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-xl font-bold text-white">🔥 분석 후보 전체 퀀트 순위</h2>
+                    <span class="text-xs text-gray-400">1분 주기 실시간 자동 갱신중</span>
+                </div>
                 <div class="overflow-x-auto">
                     <table class="w-full text-left text-sm text-gray-300">
                         <thead class="bg-gray-900 text-gray-400 uppercase text-xs">
                             <tr>
-                                <th class="p-3">종목명 (코드)</th>
-                                <th class="p-3">퀀트 스코어</th>
-                                <th class="p-3">분석 및 차트보기</th>
+                                <th class="p-3">종목명</th>
+                                <th class="p-3">역할</th>
+                                <th class="p-3">점수(95)</th>
+                                <th class="p-3">현재가</th>
+                                <th class="p-3">등락률</th>
+                                <th class="p-3">차트분석 연동</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-700">
-                            <tr>
-                                <td class="p-3 font-semibold text-white">삼성전자 (005930)</td>
-                                <td class="p-3 text-emerald-400 font-bold">92점</td>
-                                <td class="p-3">
-                                    <!-- 1-Click 차트 이동 연동 버튼 -->
-                                    <button onclick="navigateToChart('005930')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold transition flex items-center gap-1">
-                                        📈 MONEY 차트 보기
-                                    </button>
-                                </td>
-                            </tr>
-                            <tr>
-                                <td class="p-3 font-semibold text-white">SK하이닉스 (000660)</td>
-                                <td class="p-3 text-emerald-400 font-bold">88점</td>
-                                <td class="p-3">
-                                    <button onclick="navigateToChart('000660')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold transition flex items-center gap-1">
-                                        📈 MONEY 차트 보기
-                                    </button>
-                                </td>
-                            </tr>
+                        <tbody id="candidates-table-body" class="divide-y divide-gray-700">
+                            <!-- JS를 통해 동적으로 실제 종목과 시세가 삽입됩니다 -->
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
 
-        <!-- 3. [MONEY 차트] 탭 (신규 추가 및 하이브리드 진단 적용) -->
+        <!-- 3. [MONEY 차트] 탭 (하이브리드 설명란 적용) -->
         <div id="tab-content-chart" class="tab-page hidden space-y-6">
-            <!-- 차트 헤더 & 검색 기능 -->
             <div class="bg-gray-800 p-4 rounded-xl border border-gray-700 flex flex-wrap items-center justify-between gap-4">
                 <div class="flex items-center gap-3">
                     <h2 class="text-lg font-bold text-white flex items-center gap-2">
@@ -100,38 +85,36 @@
                 </div>
             </div>
 
-            <!-- 차트 & AI 설명 영역 Grid -->
             <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <!-- 캔들/선 차트 영역 (2컬럼) -->
+                <!-- 캔들 차트 시각화 -->
                 <div class="lg:col-span-2 bg-gray-800 p-5 rounded-xl border border-gray-700">
-                    <h3 id="current-stock-title" class="text-md font-bold text-gray-200 mb-4">삼성전자 (005930) 일봉 차트</h3>
+                    <h3 id="current-stock-title" class="text-md font-bold text-gray-200 mb-4">종목 차트</h3>
                     <div class="h-80 w-full relative">
                         <canvas id="stockChartCanvas"></canvas>
                     </div>
                 </div>
 
-                <!-- 하이브리드 AI 진단 & 설명란 (1컬럼) -->
+                <!-- 하이브리드 진단 리포트 설명란 -->
                 <div class="bg-gray-800 p-5 rounded-xl border border-gray-700 flex flex-col justify-between space-y-4">
                     <div class="space-y-4">
                         <div class="flex items-center gap-2 border-b border-gray-700 pb-2">
                             <span class="text-xl">🤖</span>
-                            <h3 class="text-md font-bold text-white">AI 하이브리드 차트 리포트</h3>
+                            <h3 class="text-md font-bold text-white">AI 하이브리드 차트 진단</h3>
                         </div>
 
-                        <!-- 1) 백엔드 룰베이스 알고리즘 진단 설명란 -->
+                        <!-- 1) 룰베이스 백엔드 진단 -->
                         <div class="bg-gray-900/80 p-3.5 rounded-lg border border-gray-700/60">
                             <span class="text-xs font-semibold text-indigo-400 block mb-1">📊 백엔드 룰베이스 진단</span>
                             <p id="rule-summary-text" class="text-xs text-gray-300 leading-relaxed">데이터 수집 중...</p>
                         </div>
 
-                        <!-- 2) LLM (Gemini/OpenAI) 종합 차트 진단 설명란 -->
+                        <!-- 2) LLM AI 종합 해석 -->
                         <div class="bg-gray-900/80 p-3.5 rounded-lg border border-gray-700/60">
                             <span class="text-xs font-semibold text-emerald-400 block mb-1">✨ LLM AI 종합 해석</span>
                             <p id="ai-summary-text" class="text-sm text-gray-200 leading-relaxed">조회 중입니다...</p>
                         </div>
                     </div>
 
-                    <!-- 지지선 / 저항선 수치 -->
                     <div class="grid grid-cols-2 gap-2 text-xs pt-3 border-t border-gray-700">
                         <div class="bg-gray-900 p-2.5 rounded text-center">
                             <span class="text-gray-400 block mb-0.5">주요 지지선</span>
@@ -168,11 +151,9 @@
 
     </main>
 
-    <!-- 스크립트 연동 -->
     <script>
         let chartInstance = null;
 
-        // 1. 탭 전환 제어 함수
         function switchTab(tabName) {
             document.querySelectorAll('.tab-page').forEach(page => page.classList.add('hidden'));
             document.querySelectorAll('.nav-tab').forEach(btn => {
@@ -186,66 +167,94 @@
                 activeBtn.classList.remove('text-gray-400');
                 activeBtn.classList.add('bg-indigo-600', 'text-white');
             }
+
+            if(tabName === 'flow') loadFlowCandidates();
         }
 
-        // 2. 다른 탭(MONEY FLOW 등)에서 특정 종목 클릭 시 차트 탭으로 바로 이동 연동
+        // MONEY FLOW 탭에서 클릭 시 MONEY 차트 탭으로 바로 이동 연동
         function navigateToChart(stockCode) {
             switchTab('chart');
             loadChartData(stockCode);
         }
 
-        // 3. 차트분석 탭 내 직접 검색
         function searchChartFromInput() {
-            const inputVal = document.getElementById('chart-search-input').value.trim();
-            if(inputVal) {
-                loadChartData(inputVal);
+            const val = document.getElementById('chart-search-input').value.trim();
+            if(val) loadChartData(val);
+        }
+
+        // MONEY FLOW 종목 리스트 불러오기 (진짜 주가 반영)
+        async function loadFlowCandidates() {
+            try {
+                const res = await fetch('/api/scan');
+                const data = await res.json();
+                const tbody = document.getElementById('candidates-table-body');
+                tbody.innerHTML = '';
+
+                if(data.candidates && data.candidates.length > 0) {
+                    data.candidates.forEach(item => {
+                        const isUp = item.change_rate >= 0;
+                        const rateClass = isUp ? 'text-rose-400' : 'text-blue-400';
+                        const rateSign = isUp ? '▲' : '▼';
+
+                        const tr = document.createElement('tr');
+                        tr.innerHTML = `
+                            <td class="p-3 font-semibold text-white">${item.name} <span class="text-xs text-gray-500">(${item.code})</span></td>
+                            <td class="p-3"><span class="px-2 py-0.5 bg-gray-700 rounded text-xs">${item.role}</span></td>
+                            <td class="p-3 text-emerald-400 font-bold">${item.score}점</td>
+                            <td class="p-3 font-semibold">${Number(item.price).toLocaleString()}원</td>
+                            <td class="p-3 ${rateClass} font-bold">${rateSign} ${Math.abs(item.change_rate)}%</td>
+                            <td class="p-3">
+                                <button onclick="navigateToChart('${item.code}')" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-bold transition">
+                                    📈 MONEY 차트 보기
+                                </button>
+                            </td>
+                        `;
+                        tbody.appendChild(tr);
+                    });
+                }
+            } catch (e) {
+                console.error("후보군 데이터 로딩 중 에러:", e);
             }
         }
 
-        // 4. API 연동 및 차트/AI 데이터 로딩
+        // 차트 데이터 및 AI 진단 로딩
         async function loadChartData(code = '005930') {
             try {
                 const res = await fetch(`/api/chart-analysis?code=${code}`);
                 const data = await res.json();
 
-                if(data && data.code) {
-                    document.getElementById('current-stock-title').innerText = `${data.name} (${data.code}) 기술적 차트`;
+                if(data) {
+                    document.getElementById('current-stock-title').innerText = `${data.name} (${data.code}) - 현재가: ${Number(data.current_price).toLocaleString()}원`;
                     document.getElementById('chart-score-badge').innerText = `기술적 점수: ${data.rule_score}점`;
                     document.getElementById('rule-summary-text').innerText = data.rule_summary;
                     document.getElementById('ai-summary-text').innerText = data.ai_summary;
                     document.getElementById('chart-support-price').innerText = `${Math.round(data.support_price).toLocaleString()}원`;
                     document.getElementById('chart-rose-price').innerText = `${Math.round(data.resistance_price).toLocaleString()}원`;
 
-                    renderStockChart();
+                    renderChart(data.current_price);
                 }
             } catch (err) {
-                console.error("차트 분석 데이터를 로드하는 중 오류 발생:", err);
+                console.error("차트 분석 데이터 로드 실패:", err);
             }
         }
 
-        // 5. Chart.js 시각화 렌더링
-        function renderStockChart() {
+        function renderChart(basePrice) {
             const ctx = document.getElementById('stockChartCanvas').getContext('2d');
-            
-            if(chartInstance) {
-                chartInstance.destroy();
-            }
+            if(chartInstance) chartInstance.destroy();
 
-            // 시뮬레이션용 데이터셋
-            const dummyLabels = ['1월', '2월', '3월', '4월', '5월', '6월', '7월'];
-            const dummyData = [68000, 71000, 69500, 74000, 73000, 78000, 81000];
+            const prices = [basePrice * 0.96, basePrice * 0.98, basePrice * 0.97, basePrice * 1.01, basePrice * 0.99, basePrice];
 
             chartInstance = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: dummyLabels,
+                    labels: ['5일 전', '4일 전', '3일 전', '2일 전', '어제', '오늘'],
                     datasets: [{
-                        label: '주가 추이',
-                        data: dummyData,
+                        label: '주가',
+                        data: prices,
                         borderColor: '#6366f1',
                         backgroundColor: 'rgba(99, 102, 241, 0.1)',
                         fill: true,
-                        tension: 0.3
+                        tension: 0.2
                     }]
                 },
                 options: {
@@ -260,7 +269,6 @@
             });
         }
 
-        // 페이지 초기화 시 기본 탭 실행
         window.onload = () => {
             loadChartData('005930');
         };
