@@ -18,6 +18,7 @@ import pandas as pd
 import yfinance as yf
 
 import db
+from sector_master import TICKER_MAP, SECTOR_CHAINS, get_stock_profile
 
 def get_kst_time() -> tuple[dt.datetime, str]:
     kst = dt.timezone(dt.timedelta(hours=9))
@@ -201,7 +202,7 @@ def get_earnings_calendar(week: str = ""):
 
 
 # ==========================================
-# 📈 하이킨아시 + EMA 50 전략 및 기술적 차트 API (추가된 부분)
+# 📈 국내 주식 전용 하이킨아시 + EMA 50 기술적 차트 API
 # ==========================================
 def calculate_heikin_ashi(df: pd.DataFrame) -> pd.DataFrame:
     ha_df = pd.DataFrame(index=df.index)
@@ -236,13 +237,30 @@ def generate_signals(df: pd.DataFrame, ha_df: pd.DataFrame) -> pd.DataFrame:
     return combined
 
 @app.get("/api/technical-chart")
-async def get_technical_chart(ticker: str = "BTC-USD"):
-    df = yf.download(ticker, period="6mo", interval="1d")
+async def get_technical_chart(query: str = "삼성전자"):
+    # 1. 종목명 또는 6자리 코드를 야후 파이프라인 규격(국내 주식)으로 매핑
+    ticker = query.strip()
+    if ticker in TICKER_MAP:
+        code = TICKER_MAP[ticker]
+    else:
+        code = ticker # 직접 6자리 코드 입력한 경우 가정
+
+    # 코스피(.KS) 또는 코스닥(.KQ) 자동 판별 시도 (기본 코스피 .KS 적용 후 실패 시 .KQ 대응 등 처리)
+    yf_symbol = f"{code}.KS" if not code.endswith(('.KS', '.KQ')) else code
+    
+    df = yf.download(yf_symbol, period="6mo", interval="1d")
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
     
+    # 코스피로 검색 안 되면 코스닥(.KQ)으로 재시도
+    if df.empty and not yf_symbol.endswith('.KQ'):
+        yf_symbol = f"{code}.KQ"
+        df = yf.download(yf_symbol, period="6mo", interval="1d")
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+
     if df.empty:
-        return {"error": "데이터가 없습니다."}
+        return {"error": f"'{query}'에 해당하는 국내 주식 데이터를 찾을 수 없습니다."}
 
     ha_df = calculate_heikin_ashi(df)
     final_df = generate_signals(df, ha_df)
@@ -283,7 +301,7 @@ async def get_technical_chart(ticker: str = "BTC-USD"):
             })
             
     return {
-        "ticker": ticker,
+        "ticker": query,
         "candles": candles,
         "ema": ema,
         "markers": markers
