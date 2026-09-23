@@ -6,3 +6,4 @@ apscheduler>=3.10.0
 pandas>=2.0.0
 numpy>=1.24.0
 jinja2>=3.0.0
+yfinance>=0.2.0
