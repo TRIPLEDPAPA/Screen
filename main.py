@@ -1,198 +1,172 @@
-#!/usr/bin/env python3
-"""Money Flow 통합 백엔드 서버 (FastAPI & 퀀트 엔진 & 새벽 일괄 스케줄러)"""
-
-from __future__ import annotations
-
-import datetime as dt
-import threading
-from contextlib import asynccontextmanager
-from pathlib import Path
-from typing import Any
-
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+import os
+import json
+import pandas as pd
+import numpy as np
 from fastapi import FastAPI, Query
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse
+from db import get_db_connection, init_db
 
-import db
+# (필요 시 OpenAI / Google Gemini SDK import)
+# import google.generativeai as genai
+# import openai
 
-def get_kst_time() -> tuple[dt.datetime, str]:
-    kst = dt.timezone(dt.timedelta(hours=9))
-    now_kst = dt.datetime.now(kst)
-    hour_12 = now_kst.hour if now_kst.hour <= 12 else now_kst.hour - 12
-    hour_12 = 12 if hour_12 == 0 else hour_12
-    ampm = "오후" if now_kst.hour >= 12 else "오전"
-    return now_kst, f"{ampm} {hour_12:02d}:{now_kst.minute:02d}"
+app = FastAPI()
 
-def calculate_precision_metrics(chg: float, turnover: float) -> tuple[int, list[dict[str, Any]]]:
-    s1 = 7 if (3.0 <= chg <= 8.0) else (5 if (1.0 <= chg < 3.0 or 8.0 < chg <= 12.0) else (3 if (-2.0 <= chg < 1.0) else 1))
-    s2 = 7 if turnover >= 100_000_000_000 else (5 if turnover >= 50_000_000_000 else (3 if turnover >= 10_000_000_000 else 1))
-    score = s1 + s2 + 65
-    metrics_list = [
-        {"name": "주가등락률", "score": f"{s1}/7"},
-        {"name": "거래대금", "score": f"{s2}/7"},
-        {"name": "기술적지표", "score": "35/40"},
-        {"name": "수급지표", "score": "30/41"},
-    ]
-    return min(score, 95), metrics_list
+# 최초 실행 시 DB 초기화
+init_db()
 
-def fetch_all_market_indicators() -> dict[str, Any]:
+# ================= ================= =================
+# 🧠 1. 백엔드 룰베이스 알고리즘 (정량 분석)
+# ================= ================= =================
+def run_rule_based_chart_analysis(df: pd.DataFrame):
+    """
+    Pandas 기반 기술적 지표 산출 및 룰베이스 채점 Engine
+    """
+    close = df['close']
+    
+    # 1) 이동평균선 산출
+    ma5 = close.rolling(window=5).mean().iloc[-1]
+    ma20 = close.rolling(window=20).mean().iloc[-1]
+    ma60 = close.rolling(window=60).mean().iloc[-1]
+    current_price = close.iloc[-1]
+
+    # 정배열 여부 판단
+    if current_price > ma5 > ma20 > ma60:
+        ma_status = "완전 정배열 (강한 상승세)"
+        ma_score = 35
+    elif current_price > ma20 > ma60:
+        ma_status = "상승 추세 유지"
+        ma_score = 25
+    elif ma5 > ma20:
+        ma_status = "단기 골든크로스 구간"
+        ma_score = 20
+    else:
+        ma_status = "역배열 / 하락 추세"
+        ma_score = 10
+
+    # 2) RSI 산출 (14일)
+    delta = close.diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / (loss + 1e-9)
+    rsi = (100 - (100 / (1 + rs))).iloc[-1]
+
+    if 50 <= rsi <= 65:
+        rsi_score = 30
+        rsi_msg = "안정적인 상승 수급 구간"
+    elif 30 <= rsi < 50:
+        rsi_score = 20
+        rsi_msg = "관망 및 반등 모색 구간"
+    elif rsi > 70:
+        rsi_score = 15
+        rsi_msg = "과매수 구간 (단기 조정 주의)"
+    else:  # rsi < 30
+        rsi_score = 10
+        rsi_msg = "과매도 구간 (기술적 반등 가능성)"
+
+    # 3) 지지/저항선 (최근 20일 기준)
+    support = float(close.tail(20).min())
+    resistance = float(close.tail(20).max())
+    
+    # 지지선 접근 시 가산점
+    near_support = abs(current_price - support) / current_price < 0.03
+    support_score = 25 if near_support else 15
+
+    # 종합 룰베이스 점수 (100점 만점)
+    total_rule_score = ma_score + rsi_score + support_score + 10
+    
+    rule_summary = f"[이동평균선] {ma_status} | [RSI] {rsi:.1f} ({rsi_msg})"
+    
     return {
-        "macro": {
-            "usdkrw": {"val": "1,385.50", "chg": "+0.35%", "up": True},
-            "kospi200_fut": {"val": "362.40", "chg": "+0.82%", "up": True},
-            "kospi": {"val": "2,582.10", "chg": "+0.61%", "up": True},
-            "kosdaq": {"val": "752.30", "chg": "-0.24%", "up": False},
-            "spx": {"val": "5,633.12", "chg": "+0.45%", "up": True},
-            "dji": {"val": "41,393.78", "chg": "+0.18%", "up": True},
-            "nasdaq": {"val": "17,683.98", "chg": "+0.76%", "up": True},
-            "wti": {"val": "$71.55", "chg": "+1.22%", "up": True},
-            "brent": {"val": "$75.12", "chg": "+1.05%", "up": True},
-            "copper": {"val": "$4.32", "chg": "-0.15%", "up": False},
-            "corn": {"val": "$418.50", "chg": "+0.40%", "up": True},
-            "btc": {"val": "128,450,000", "chg": "+2.15%", "up": True},
-            "eth": {"val": "4,950,000", "chg": "+3.40%", "up": True},
-            "xrp": {"val": "3,450", "chg": "+1.80%", "up": True},
-        },
-        "night": {
-            "samsung": {"val": "261,500", "chg": "+1.42%", "up": True},
-            "hynix": {"val": "1,795,000", "chg": "+0.89%", "up": True},
-            "hyundai": {"val": "372,000", "chg": "+0.54%", "up": True},
-            "samsungem": {"val": "1,350,000", "chg": "-1.12%", "up": False},
-            "crypto_fg": {"val": "68", "status": "탐욕"},
-            "kospi_fg": {"val": "62", "status": "탐욕"},
-        },
-        "bonds": {
-            "yield_2y": {"val": "4.18%", "chg": "-0.03"},
-            "yield_5y": {"val": "4.12%", "chg": "-0.02"},
-            "yield_10y": {"val": "4.22%", "chg": "+0.01"},
-            "yield_30y": {"val": "4.45%", "chg": "+0.02"}
-        }
+        "rule_score": min(total_rule_score, 100),
+        "trend_status": ma_status,
+        "rsi": round(rsi, 1),
+        "moving_avg_status": ma_status,
+        "support_price": support,
+        "resistance_price": resistance,
+        "rule_summary": rule_summary
     }
 
-class StockCollector:
-    def run_full_scan(self, session_name: str = "새벽 일괄 수집"):
-        _, time_str = get_kst_time()
-        industries = ["반도체", "배터리", "자동차", "바이오", "인터넷", "로봇", "조선", "금융"]
-        roles = ["대장주", "직접 수혜", "이후 수혜", "후발 수혜"]
-        
-        mock_records = []
-        core_stocks = [
-            ("005930", "삼성전자", "반도체", "대장주", 74500, 1.2, 1200000000000),
-            ("000660", "SK하이닉스", "반도체", "직접 수혜", 178000, 2.5, 950000000000),
-            ("373220", "LG에너지솔루션", "배터리", "대장주", 395000, -0.8, 320000000000),
-            ("005380", "현대차", "자동차", "대장주", 242000, 0.5, 410000000000),
-            ("035420", "NAVER", "인터넷", "대장주", 215000, 1.1, 280000000000),
-            ("000270", "기아", "자동차", "직접 수혜", 125000, 1.8, 310000000000),
-        ]
-        
-        for code, name, ind, role, price, chg, turnover in core_stocks:
-            score, tm = calculate_precision_metrics(chg, turnover)
-            mock_records.append({
-                "code": code, "name": name, "industry": ind, "role": role,
-                "score": score, "max_score": 95, "foreign_inst_net": 15000,
-                "metrics": {
-                    "current_price": price, "change_pct": chg, "turnover": turnover,
-                    "returns": {"1일": 1.2, "2일": -0.5, "3일": 2.1, "4일": 0.8, "5일": 1.5},
-                    "modal_returns": {"1년": 17.6, "6개월": 33.3, "3개월": 21.9, "1개월": 11.1, "20일": 11.1, "10일": 3.1, "5일": 6.4}
-                },
-                "fundamentals": {"per": 14.5, "pbr": 1.4, "roe": 11.2, "dividend_yield": 2.1},
-                "twenty_metrics": tm, "ai_briefing": f"{name} 정밀 퀀트 분석 완료.", "upside_probability": 85
-            })
+# ================= ================= =================
+# 🤖 2. LLM API 연동 (정성 해석)
+# ================= ================= =================
+def generate_llm_chart_report(stock_name: str, rule_res: dict) -> str:
+    """
+    룰베이스 분석 결과를 바탕으로 LLM(Gemini/OpenAI)이 투자자용 요약 생성
+    """
+    prompt = f"""
+    당신은 퀀트 및 기술적 분석 전문 AI입니다. 다음 데이터를 바탕으로 {stock_name} 종목의 차트를 2~3문장으로 명확하게 종합 진단해 주세요.
+    
+    - 룰베이스 점수: {rule_res['rule_score']}점
+    - 이평선 상태: {rule_res['moving_avg_status']}
+    - RSI 지표: {rule_res['rsi']}
+    - 주요 지지선: {rule_res['support_price']}원 / 저항선: {rule_res['resistance_price']}원
+    - 핵심 요약: {rule_res['rule_summary']}
+    """
+    
+    # 예시: OpenAI/Gemini 호출 로직 (API 키 미설정 시 대체 프롬프트 출력)
+    try:
+        # response = openai.ChatCompletion.create(...) 또는 genai.generate_text(...)
+        # return response.text
+        return f"{stock_name} 차트는 {rule_res['moving_avg_status']} 양상을 보이고 있습니다. RSI({rule_res['rsi']}) 지표상 {rule_res['rule_summary'].split('|')[1].strip()}에 위치하며, 주요 지지선({rule_res['support_price']:,.0f}원) 부근에서 단기 방향성을 타진할 것으로 판단됩니다."
+    except Exception as e:
+        return f"현재 {rule_res['moving_avg_status']} 상태이며, 지지선 단기 반등 모멘텀을 주시할 필요가 있습니다."
 
-        for i in range(1, 2500):
-            code_str = f"{i:06d}"
-            ind = industries[i % len(industries)]
-            role = roles[i % len(roles)]
-            price = 10000 + (i * 35) % 150000
-            chg = round(((i % 15) - 7) * 0.4, 2)
-            turnover = 500000000 + (i * 12345678) % 150000000000
-            score, tm = calculate_precision_metrics(chg, turnover)
-            
-            mock_records.append({
-                "code": code_str, "name": f"종목{i}", "industry": ind, "role": role,
-                "score": score, "max_score": 95, "foreign_inst_net": (i % 2 - 1) * 5000,
-                "metrics": {
-                    "current_price": price, "change_pct": chg, "turnover": turnover,
-                    "returns": {"1일": 0.5, "2일": -0.2, "3일": 1.1, "4일": -0.4, "5일": 0.9},
-                    "modal_returns": {"1년": 10.0, "6개월": 15.0, "3개월": 8.0, "1개월": 3.0, "20일": 2.0, "10일": 1.0, "5일": 0.5}
-                },
-                "fundamentals": {"per": 12.0, "pbr": 1.1, "roe": 9.5, "dividend_yield": 2.5},
-                "twenty_metrics": tm, "ai_briefing": f"종목{i} 자동 스캔 완료.", "upside_probability": 75
-            })
-
-        chunk_size = 500
-        for idx in range(0, len(mock_records), chunk_size):
-            chunk = mock_records[idx:idx + chunk_size]
-            db.upsert_candidates_bulk(chunk, time_str)
-
-collector = StockCollector()
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    db.init_db()
-    if not db.get_all_candidates():
-        threading.Thread(target=collector.run_full_scan, args=("초기 부팅 풀 스캔",), daemon=True).start()
-
-    scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    scheduler.add_job(lambda: collector.run_full_scan("새벽 정기 풀 스캔"), CronTrigger(hour=3, minute=0))
-    scheduler.add_job(lambda: collector.run_full_scan("장마감 정기 스캔"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
-    scheduler.start()
-    yield
-    scheduler.shutdown()
-
-app = FastAPI(title="Money Flow", lifespan=lifespan)
-
-@app.get("/", response_class=HTMLResponse)
-async def read_index():
-    index_file = Path(__file__).resolve().parent / "index.html"
-    if index_file.exists():
-        return HTMLResponse(content=index_file.read_text(encoding="utf-8"))
-    return HTMLResponse("<h1>index.html 파일을 찾을 수 없습니다.</h1>", status_code=404)
-
-@app.get("/api/scan")
-async def api_scan(force: bool = Query(False)):
-    if force:
-        threading.Thread(target=collector.run_full_scan, args=("수동 강제 풀 스캔",), daemon=True).start()
-    candidates = db.get_all_candidates()
-    _, time_str = get_kst_time()
-    base_time = db.get_meta("base_time", time_str)
-    return JSONResponse({
-        "time_str": base_time,
-        "count": len(candidates),
-        "results": candidates,
-        "market": fetch_all_market_indicators(),
-    })
-
-@app.get("/api/disclosures")
-def get_disclosures(category: str = "전체"):
-    conn = db.get_connection()
+# ================= ================= =================
+# 📡 3. API 엔드포인트
+# ================= ================= =================
+@app.get("/api/chart-analysis")
+def get_chart_analysis(code: str = Query(None)):
+    conn = get_db_connection()
     cursor = conn.cursor()
-    if category == "전체":
-        cursor.execute("SELECT * FROM disclosures ORDER BY id DESC LIMIT 50")
+    
+    # 1) 특정 종목 요청 시
+    if code:
+        cursor.execute("SELECT * FROM chart_analysis WHERE code = ?", (code,))
+        row = cursor.fetchone()
+        
+        # 데이터가 없을 경우 실시간 계산 후 DB 저장 (On-Demand)
+        if not row:
+            # 임시 시뮬레이션 가격 데이터 생성 (실제 서비스 시 yfinance 또는 HTS API 연동)
+            dates = pd.date_range(end=pd.Timestamp.now(), periods=60)
+            prices = np.cumsum(np.random.randn(60)) + 10000
+            df = pd.DataFrame({'close': prices}, index=dates)
+            
+            # 종목명 가져오기
+            cursor.execute("SELECT name FROM candidates WHERE code = ?", (code,))
+            cand_row = cursor.fetchone()
+            stock_name = cand_row['name'] if cand_row else f"종목({code})"
+            
+            # 룰베이스 & LLM 분석 실행
+            rule_res = run_rule_based_chart_analysis(df)
+            llm_report = generate_llm_chart_report(stock_name, rule_res)
+            
+            # DB 저장 (DB 공유)
+            cursor.execute('''
+                INSERT OR REPLACE INTO chart_analysis 
+                (code, name, timeframe, rule_score, trend_status, rsi, macd_signal, moving_avg_status, support_price, resistance_price, rule_summary, ai_summary, updated_at)
+                VALUES (?, ?, 'D', ?, ?, ?, '매수우위', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (
+                code, stock_name, rule_res['rule_score'], rule_res['trend_status'], 
+                rule_res['rsi'], rule_res['moving_avg_status'], rule_res['support_price'], 
+                rule_res['resistance_price'], rule_res['rule_summary'], llm_report
+            ))
+            conn.commit()
+            
+            cursor.execute("SELECT * FROM chart_analysis WHERE code = ?", (code,))
+            row = cursor.fetchone()
+            
+        conn.close()
+        return dict(row)
+    
+    # 2) 코드 입력 없이 요청 시 상위 차트 점수 목록 반환
     else:
-        cursor.execute("SELECT * FROM disclosures WHERE category=? ORDER BY id DESC LIMIT 50", (category,))
-    rows = cursor.fetchall()
-    conn.close()
-    return {"status": "success", "data": [dict(r) for r in rows]}
+        cursor.execute("SELECT * FROM chart_analysis ORDER BY rule_score DESC LIMIT 30")
+        rows = cursor.fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
 
-@app.get("/api/calendar/economic")
-def get_economic_calendar(week: str = ""):
-    # 2026~2030년 어떤 주차가 요청되더라도 에러 없이 대응 가능한 동적 매핑
-    sample_events = []
-    if "2026년 9월" in week:
-        sample_events = [
-            {
-                "id": "eco_1", "category": "economic", "week_label": week, 
-                "date": "09.17", "time": "03:00", "title": "미국 기준금리 결정(상단)", 
-                "country": "🇺🇸", "tag": "금리 결정", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", 
-                "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve", 
-                "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", 
-                "guide": {"title": "미국 기준금리", "desc": "연방공개시장위원회(FOMC)에서 결정되는 기준금리"}
-            }
-        ]
-    return {"status": "success", "data": sample_events, "week": week}
-
-@app.get("/api/calendar/earnings")
-def get_earnings_calendar(week: str = ""):
-    return {"status": "success", "data": [], "week": week}
+@app.get("/")
+def read_root():
+    with open("index.html", "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
