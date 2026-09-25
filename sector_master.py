@@ -1,27 +1,23 @@
 """50개 섹터 및 밸류체인 마스터 데이터 (sector_master.py)"""
 
-from pathlib import Path
-import pandas as pd
+import db
 
-EXCEL_FILE = Path(__file__).resolve().parent / "코스피_코스닥_업종별_종목정리.xlsx"
+def get_ticker_map() -> dict[str, str]:
+    mapping = {
+        "삼성전자": "005930", "SK하이닉스": "000660", "LG에너지솔루션": "373220",
+        "현대차": "005380", "NAVER": "035420", "기아": "000270", "POSCO홀딩스": "005490"
+    }
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT name, code FROM stock_list")
+        rows = cursor.fetchall()
+        conn.close()
+        for r in rows:
+            if r["name"] and r["code"]:
+                mapping[r["name"].strip()] = str(r["code"]).zfill(6)
+    except Exception:
+        pass
+    return mapping
 
-TICKER_MAP = {
-    "삼성전자": "005930", "SK하이닉스": "000660", "한국가스공사": "036460",
-    "포스코인터내셔널": "047050", "현대건설": "000720", "LG에너지솔루션": "373220"
-}
-
-def load_ticker_map_from_excel():
-    global TICKER_MAP
-    if EXCEL_FILE.exists():
-        try:
-            df_list = pd.read_excel(EXCEL_FILE, sheet_name='종목별목록', header=2)
-            df_list.columns = df_list.iloc[2]
-            df_list = df_list.iloc[3:].dropna(subset=['종목코드']).reset_index(drop=True)
-            for _, row in df_list.iterrows():
-                name = str(row['종목명']).strip()
-                code = str(row['종목코드']).zfill(6)
-                TICKER_MAP[name] = code
-        except Exception:
-            pass
-
-load_ticker_map_from_excel()
+TICKER_MAP = get_ticker_map()
