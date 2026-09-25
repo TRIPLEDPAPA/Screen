@@ -182,7 +182,19 @@ def get_disclosures(category: str = "전체"):
 
 @app.get("/api/calendar/economic")
 def get_economic_calendar(week: str = ""):
-    return {"status": "success", "data": [], "week": week}
+    sample_events = []
+    if "2026년 9월" in week:
+        sample_events = [
+            {
+                "id": "eco_1", "category": "economic", "week_label": week, 
+                "date": "09.17", "time": "03:00", "title": "미국 기준금리 결정(상단)", 
+                "country": "🇺🇸", "tag": "금리 결정", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", 
+                "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve", 
+                "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", 
+                "guide": {"title": "미국 기준금리", "desc": "연방공개시장위원회(FOMC)에서 결정되는 기준금리"}
+            }
+        ]
+    return {"status": "success", "data": sample_events, "week": week}
 
 @app.get("/api/calendar/earnings")
 def get_earnings_calendar(week: str = ""):
