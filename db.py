@@ -18,6 +18,7 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
 
+    # 1. 퀀트 후보 종목 테이블 (2,500개 전 종목 대응)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS candidates (
             code TEXT PRIMARY KEY,
@@ -34,6 +35,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_industry ON candidates(industry);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_score ON candidates(score DESC);")
 
+    # 2. DART 공시 피드 테이블
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS disclosures (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -48,6 +50,7 @@ def init_db():
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_disclosures_date ON disclosures(date_md DESC);")
 
+    # 3. 캘린더 일정 테이블 (다년도 주차별 관리)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS calendar_events (
             id TEXT PRIMARY KEY,
@@ -70,6 +73,7 @@ def init_db():
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_calendar_week ON calendar_events(week_label);")
 
+    # 4. 메타 정보 테이블
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS meta (
             key TEXT PRIMARY KEY,
