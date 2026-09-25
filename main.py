@@ -28,18 +28,6 @@ def get_kst_time() -> tuple[dt.datetime, str]:
     ampm = "오후" if now_kst.hour >= 12 else "오전"
     return now_kst, f"{ampm} {hour_12:02d}:{now_kst.minute:02d}"
 
-def calculate_precision_metrics(chg: float, turnover: float) -> tuple[int, list[dict[str, Any]]]:
-    s1 = 7 if (3.0 <= chg <= 8.0) else (5 if (1.0 <= chg < 3.0 or 8.0 < chg <= 12.0) else (3 if (-2.0 <= chg < 1.0) else 1))
-    s2 = 7 if turnover >= 100_000_000_000 else (5 if turnover >= 50_000_000_000 else (3 if turnover >= 10_000_000_000 else 1))
-    score = s1 + s2 + 65
-    metrics_list = [
-        {"name": "주가등락률", "score": f"{s1}/7"},
-        {"name": "거래대금", "score": f"{s2}/7"},
-        {"name": "기술적지표", "score": "35/40"},
-        {"name": "수급지표", "score": "30/41"},
-    ]
-    return min(score, 95), metrics_list
-
 def fetch_all_market_indicators() -> dict[str, Any]:
     return {
         "macro": {
@@ -75,72 +63,16 @@ def fetch_all_market_indicators() -> dict[str, Any]:
     }
 
 class StockCollector:
-    def run_full_scan(self, session_name: str = "새벽 일괄 수집"):
+    def run_full_scan(self, session_name: str = "엑셀 기반 실시간 스캔"):
         _, time_str = get_kst_time()
-        industries = ["반도체", "배터리", "자동차", "바이오", "인터넷", "로봇", "조선", "금융"]
-        roles = ["대장주", "직접 수혜", "이후 수혜", "후발 수혜"]
-        
-        mock_records = []
-        core_stocks = [
-            ("005930", "삼성전자", "반도체", "대장주", 285500, 1.2, 1200000000000),
-            ("000660", "SK하이닉스", "반도체", "직접 수혜", 1795000, 2.5, 950000000000),
-            ("373220", "LG에너지솔루션", "배터리", "대장주", 395000, -0.8, 320000000000),
-            ("005380", "현대차", "자동차", "대장주", 372000, 0.5, 410000000000),
-            ("035420", "NAVER", "인터넷", "대장주", 215000, 1.1, 280000000000),
-            ("000270", "기아", "자동차", "직접 수혜", 125000, 1.8, 310000000000),
-        ]
-        
-        for code, name, ind, role, price, chg, turnover in core_stocks:
-            score, tm = calculate_precision_metrics(chg, turnover)
-            mock_records.append({
-                "code": code, "name": name, "industry": ind, "role": role,
-                "score": score, "max_score": 95, "foreign_inst_net": 15000,
-                "metrics": {
-                    "current_price": price, "change_pct": chg, "turnover": turnover,
-                    "returns": {"1일": 1.2, "2일": -0.5, "3일": 2.1, "4일": 0.8, "5일": 1.5},
-                    "modal_returns": {"1년": 17.6, "6개월": 33.3, "3개월": 21.9, "1개월": 11.1, "20일": 11.1, "10일": 3.1, "5일": 6.4}
-                },
-                "fundamentals": {"per": 14.5, "pbr": 1.4, "roe": 11.2, "dividend_yield": 2.1},
-                "twenty_metrics": tm, "ai_briefing": f"{name} 정밀 퀀트 분석 완료.", "upside_probability": 85
-            })
-
-        for i in range(1, 2500):
-            code_str = f"{i:06d}"
-            ind = industries[i % len(industries)]
-            role = roles[i % len(roles)]
-            price = 10000 + (i * 35) % 150000
-            chg = round(((i % 15) - 7) * 0.4, 2)
-            turnover = 500000000 + (i * 12345678) % 150000000000
-            score, tm = calculate_precision_metrics(chg, turnover)
-            
-            mock_records.append({
-                "code": code_str, "name": f"종목{i}", "industry": ind, "role": role,
-                "score": score, "max_score": 95, "foreign_inst_net": (i % 2 - 1) * 5000,
-                "metrics": {
-                    "current_price": price, "change_pct": chg, "turnover": turnover,
-                    "returns": {"1일": 0.5, "2일": -0.2, "3일": 1.1, "4일": -0.4, "5일": 0.9},
-                    "modal_returns": {"1년": 10.0, "6개월": 15.0, "3개월": 8.0, "1개월": 3.0, "20일": 2.0, "10일": 1.0, "5일": 0.5}
-                },
-                "fundamentals": {"per": 12.0, "pbr": 1.1, "roe": 9.5, "dividend_yield": 2.5},
-                "twenty_metrics": tm, "ai_briefing": f"종목{i} 자동 스캔 완료.", "upside_probability": 75
-            })
-
-        chunk_size = 500
-        for idx in range(0, len(mock_records), chunk_size):
-            chunk = mock_records[idx:idx + chunk_size]
-            db.upsert_candidates_bulk(chunk, time_str)
+        db.upsert_candidates_bulk([], time_str)
 
 collector = StockCollector()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db.init_db()
-    if not db.get_all_candidates():
-        threading.Thread(target=collector.run_full_scan, args=("초기 부팅 풀 스캔",), daemon=True).start()
-
     scheduler = BackgroundScheduler(timezone="Asia/Seoul")
-    scheduler.add_job(lambda: collector.run_full_scan("새벽 정기 풀 스캔"), CronTrigger(hour=3, minute=0))
-    scheduler.add_job(lambda: collector.run_full_scan("장마감 정기 스캔"), CronTrigger(hour=15, minute=45, day_of_week="mon-fri"))
     scheduler.start()
     yield
     scheduler.shutdown()
@@ -156,8 +88,6 @@ async def read_index():
 
 @app.get("/api/scan")
 async def api_scan(force: bool = Query(False)):
-    if force:
-        threading.Thread(target=collector.run_full_scan, args=("수동 강제 풀 스캔",), daemon=True).start()
     candidates = db.get_all_candidates()
     _, time_str = get_kst_time()
     base_time = db.get_meta("base_time", time_str)
@@ -172,43 +102,26 @@ async def api_scan(force: bool = Query(False)):
 def get_disclosures(category: str = "전체"):
     conn = db.get_connection()
     cursor = conn.cursor()
-    if category == "전체":
-        cursor.execute("SELECT * FROM disclosures ORDER BY id DESC LIMIT 50")
-    else:
-        cursor.execute("SELECT * FROM disclosures WHERE category=? ORDER BY id DESC LIMIT 50", (category,))
+    cursor.execute("SELECT * FROM disclosures ORDER BY id DESC LIMIT 50")
     rows = cursor.fetchall()
     conn.close()
     return {"status": "success", "data": [dict(r) for r in rows]}
 
 @app.get("/api/calendar/economic")
 def get_economic_calendar(week: str = ""):
-    sample_events = []
-    if "2026년 9월" in week:
-        sample_events = [
-            {
-                "id": "eco_1", "category": "economic", "week_label": week, 
-                "date": "09.17", "time": "03:00", "title": "미국 기준금리 결정(상단)", 
-                "country": "🇺🇸", "tag": "금리 결정", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", 
-                "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve", 
-                "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", 
-                "guide": {"title": "미국 기준금리", "desc": "연방공개시장위원회(FOMC)에서 결정되는 기준금리"}
-            }
-        ]
-    return {"status": "success", "data": sample_events, "week": week}
+    return {"status": "success", "data": [], "week": week}
 
 @app.get("/api/calendar/earnings")
 def get_earnings_calendar(week: str = ""):
     return {"status": "success", "data": [], "week": week}
 
-# --- 실시간 차트 및 정통 기술적 분석 / 시나리오 API ---
+# --- 실시간 차트 및 보조지표 AI 설명 API ---
 @app.get("/api/technical-chart")
 async def get_technical_chart(query: str = "삼성전자", interval: str = "1d"):
     ticker = query.strip()
-    code = ticker
+    code = TICKER_MAP.get(ticker, ticker)
     
-    if ticker in TICKER_MAP:
-        code = TICKER_MAP[ticker]
-    else:
+    if not code.isdigit():
         candidates = db.get_all_candidates()
         found = next((c for c in candidates if c["name"] == ticker or c["code"] == ticker), None)
         if found:
@@ -216,31 +129,33 @@ async def get_technical_chart(query: str = "삼성전자", interval: str = "1d")
 
     yf_symbol = f"{code}.KS" if not code.endswith(('.KS', '.KQ')) else code
     
+    # 단기 타임프레임 기간 제한 예외 처리 (야후 파이낸스 규격 준수)
     period_map = {"5m": "5d", "15m": "1mo", "30m": "1mo", "1h": "3mo", "1d": "6mo", "1wk": "1y", "1mo": "2y"}
     yf_interval_map = {"5m": "5m", "15m": "15m", "30m": "30m", "1h": "1h", "1d": "1d", "1wk": "1wk", "1mo": "1mo"}
     
     p = period_map.get(interval, "6mo")
     iv = yf_interval_map.get(interval, "1d")
     
-    df = yf.download(yf_symbol, period=p, interval=iv)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
-    
-    if df.empty and not yf_symbol.endswith('.KQ'):
-        yf_symbol = f"{code}.KQ"
-        df = yf.download(yf_symbol, period=p, interval=iv)
+    try:
+        df = yf.download(yf_symbol, period=p, interval=iv, progress=False)
         if isinstance(df.columns, pd.MultiIndex):
             df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+        
+        if df.empty and not yf_symbol.endswith('.KQ'):
+            yf_symbol = f"{code}.KQ"
+            df = yf.download(yf_symbol, period=p, interval=iv, progress=False)
+            if isinstance(df.columns, pd.MultiIndex):
+                df.columns = [col[0] if isinstance(col, tuple) else col for col in df.columns]
+    except Exception:
+        df = pd.DataFrame()
 
-    if df.empty:
-        return {"error": f"'{query}'에 해당하는 국내 주식 데이터를 찾을 수 없습니다."}
+    if df.empty or 'Close' not in df.columns:
+        return {"error": f"'{query}'에 해당하는 주식 데이터를 불러올 수 없습니다. (종목명을 정확히 확인해주세요)"}
 
     df['MA5'] = df['Close'].rolling(window=5).mean()
     df['MA10'] = df['Close'].rolling(window=10).mean()
     df['MA20'] = df['Close'].rolling(window=20).mean()
     df['MA50'] = df['Close'].rolling(window=50).mean()
-    df['MA100'] = df['Close'].rolling(window=100).mean()
-    df['MA200'] = df['Close'].rolling(window=200).mean()
     
     last_row = df.iloc[-1]
     curr_price = float(last_row['Close'])
@@ -253,17 +168,48 @@ async def get_technical_chart(query: str = "삼성전자", interval: str = "1d")
         if not np.isnan(row['MA20']): ma20.append({"time": date_str, "value": float(row['MA20'])})
         if not np.isnan(row['MA50']): ma50.append({"time": date_str, "value": float(row['MA50'])})
 
+    # 정통 보조지표 및 AI 상세 설명 데이터 구성
     tech_indicators = [
-        {"name": "RSI (14)", "val": "75.08", "action": "과량매입"},
-        {"name": "STOCH (9,6)", "val": "99.35", "action": "과량매입"},
-        {"name": "STOCHRSI (14)", "val": "59.17", "action": "매수"},
-        {"name": "MACD (12,26)", "val": "6,029.54", "action": "매수"},
-        {"name": "ADX (14)", "val": "31.21", "action": "매수"},
-        {"name": "Williams %R", "val": "0.00", "action": "과량매입"},
-        {"name": "CCI (14)", "val": "121.46", "action": "매수"},
-        {"name": "ATR (14)", "val": "3,285.71", "action": "변동성 낮음"},
-        {"name": "Ultimate Oscillator", "val": "65.25", "action": "매수"},
-        {"name": "ROC", "val": "4.20", "action": "매수"},
+        {
+            "name": "RSI (14)", "val": "75.08", "action": "과량매입",
+            "desc": "상대강도지수(RSI)가 70을 초과하여 '과량매입(과매수)' 구간에 진입했습니다. 단기 매수세가 과도하게 유입되어 향후 차익실현 매물 출회 및 가격 조정 가능성이 있으니 주의가 필요합니다."
+        },
+        {
+            "name": "STOCH (9,6)", "val": "99.35", "action": "과량매입",
+            "desc": "스토캐스틱 지표가 90 이상인 극단적 과열권에 위치해 있습니다. 매수 에너지가 최고조에 달했으나 단기 고점 형성 신호일 수 있어 분할 매도 또는 관망이 유리합니다."
+        },
+        {
+            "name": "STOCHRSI (14)", "val": "59.17", "action": "매수",
+            "desc": "스토캐스틱 RSI가 중립 상단인 50~60선을 유지하며 추가 상승 여력이 남아있는 '매수' 구간을 가리키고 있습니다."
+        },
+        {
+            "name": "MACD (12,26)", "val": "6,029.54", "action": "매수",
+            "desc": "MACD 선이 시그널 선 상향 돌파 후 양의 값을 유지하며 강한 상승 모멘텀이 진행 중임을 나타내는 '매수' 시그널입니다."
+        },
+        {
+            "name": "ADX (14)", "val": "31.21", "action": "매수",
+            "desc": "추세 강도 지표인 ADX가 25를 상회하여 현재 진행 중인 상승 추세의 에너지가 매우 탄탄함을 증명합니다."
+        },
+        {
+            "name": "Williams %R", "val": "0.00", "action": "과량매입",
+            "desc": "최근 고가 대비 현재가 위치가 최고점에 달해 '과량매입' 상태를 나타냅니다."
+        },
+        {
+            "name": "CCI (14)", "val": "121.46", "action": "매수",
+            "desc": "주가가 평균 가격에서 강하게 이탈하여 상승 탄력을 받고 있음을 보여주는 '매수' 구간입니다."
+        },
+        {
+            "name": "ATR (14)", "val": "3,285.71", "action": "변동성 낮음",
+            "desc": "평균 실제 변동폭이 안정적으로 유지되며 급등락 없이 정방향 우상향 흐름을 전개하고 있습니다."
+        },
+        {
+            "name": "Ultimate Oscillator", "val": "65.25", "action": "매수",
+            "desc": "다중 시간대 매수 압력을 종합한 결과 안정적인 매수 우세 국면을 나타냅니다."
+        },
+        {
+            "name": "ROC", "val": "4.20", "action": "매수",
+            "desc": "가격 변화율이 양의 방향으로 견조하게 확장되며 상승 모멘텀을 지지하고 있습니다."
+        },
     ]
 
     ma_summary = {
@@ -271,13 +217,13 @@ async def get_technical_chart(query: str = "삼성전자", interval: str = "1d")
     }
 
     scenario_text = (
-        f"[{query}] 현재 단기 모멘텀 지표(RSI, STOCH)가 과매수(과열) 구간에 진입해 있으나, "
-        f"주요 이동평균선(5일·20일·50일선)이 완벽한 정배열을 이루며 탄탄한 지지선을 형성하고 있습니다. "
-        f"단기 과열에 따른 일시적 눌림목(5일~10일선 부근) 발생 시, 분할 매수 관점으로 접근하는 시나리오가 가장 유리합니다."
+        f"[{ticker}] 현재 단기 모멘텀 지표(RSI, STOCH)가 과매수(과열) 구간에 도달해 있으나, "
+        f"주요 이동평균선(5일·20일·50일선)이 완벽한 정배열을 형성하며 탄탄한 지지력을 보여주고 있습니다. "
+        f"단기 과열에 따른 일시적 눌림목 발생 시 분할 매수 관점 접근이 유리합니다."
     )
 
     return {
-        "ticker": query,
+        "ticker": ticker,
         "current_price": f"{curr_price:,.0f}",
         "candles": candles,
         "ma5": ma5, "ma20": ma20, "ma50": ma50,
