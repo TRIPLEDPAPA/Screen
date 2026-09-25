@@ -21,7 +21,7 @@ def init_db():
     conn = get_connection()
     cursor = conn.cursor()
 
-    # 1. 퀀트 후보 종목 테이블
+    # 1. 퀀트 후보 및 검색/차트 연동 테이블 (2,649개 전수)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS candidates (
             code TEXT PRIMARY KEY,
@@ -38,40 +38,54 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_industry ON candidates(industry);")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_candidates_score ON candidates(score DESC);")
 
-    # 2. 업종별 요약 테이블 (엑셀 연동)
+    # 2. 전종목 목록 테이블 (2,649개)
     cursor.execute("""
-        CREATE TABLE IF NOT EXISTS industry_summary (
+        CREATE TABLE IF NOT EXISTS stock_all_list (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            major_cat TEXT,
-            sub_biz TEXT,
-            leader TEXT,
-            sub_infra TEXT,
-            peer TEXT,
-            description TEXT
-        )
-    """)
-
-    # 3. 종목별 목록 테이블 (엑셀 연동)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS stock_list (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            major_cat TEXT,
-            sub_biz TEXT,
-            role TEXT,
-            name TEXT,
-            code TEXT,
             market TEXT,
-            product TEXT,
-            customer TEXT,
-            level TEXT,
-            note TEXT,
-            division TEXT,
-            source TEXT
+            code TEXT,
+            name TEXT,
+            user_industry TEXT,
+            role TEXT,
+            krx_industry TEXT,
+            krx_product TEXT,
+            classification_basis TEXT,
+            listing_date TEXT,
+            url TEXT
         )
     """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_list_code ON stock_list(code);")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_all_code ON stock_all_list(code);")
 
-    # 4. DART 공시 피드 테이블
+    # 3. 대표소부장관계 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS representative_supply (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            major_cat TEXT,
+            sub_biz TEXT,
+            legacy_role TEXT,
+            code TEXT,
+            current_name TEXT,
+            market TEXT,
+            krx_industry TEXT,
+            krx_product TEXT,
+            customer TEXT,
+            verification TEXT,
+            legacy_desc TEXT,
+            ref_url TEXT
+        )
+    """)
+
+    # 4. 분류현황 테이블
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS classification_status (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sub_biz TEXT,
+            stock_count INTEGER,
+            classification_method TEXT
+        )
+    """)
+
+    # 5. 공시 피드 테이블
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS disclosures (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -84,30 +98,6 @@ def init_db():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_disclosures_date ON disclosures(date_md DESC);")
-
-    # 5. 캘린더 일정 테이블
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS calendar_events (
-            id TEXT PRIMARY KEY,
-            category TEXT,
-            week_label TEXT,
-            date_md TEXT,
-            time TEXT,
-            title TEXT,
-            country TEXT,
-            tag TEXT,
-            tag_color TEXT,
-            actual TEXT,
-            forecast TEXT,
-            source TEXT,
-            ai_summary TEXT,
-            guide_json TEXT,
-            status TEXT DEFAULT 'SCHEDULED',
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    cursor.execute("CREATE INDEX IF NOT EXISTS idx_calendar_week ON calendar_events(week_label);")
 
     # 6. 메타 정보 테이블
     cursor.execute("""
@@ -120,22 +110,23 @@ def init_db():
     conn.commit()
     conn.close()
 
-    # 업로드된 엑셀 데이터를 DB에 직접 적재
+    # 엑셀 파일 데이터 DB 전수 적재 실행
     load_excel_to_db_if_needed()
 
 def load_excel_to_db_if_needed():
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM stock_list")
+    cursor.execute("SELECT COUNT(*) FROM stock_all_list")
     count = cursor.fetchone()[0]
     conn.close()
 
     if count > 0:
-        return  # 이미 DB에 적재되어 있음
+        return  # 이미 적재됨
 
     excel_path = None
     for f in os.listdir('.'):
-        if unicodedata.normalize('NFC', f) == '코스피_코스닥_업종별_종목정리.xlsx':
+        norm_f = unicodedata.normalize('NFC', f)
+        if '코스피_코스닥_업종별_종목정리' in norm_f and f.endswith('.xlsx'):
             excel_path = f
             break
 
@@ -146,75 +137,95 @@ def load_excel_to_db_if_needed():
         conn = get_connection()
         cursor = conn.cursor()
 
-        # 업종별요약 시트 적재
-        df_summary = pd.read_excel(excel_path, sheet_name='업종별요약', header=2)
-        df_summary.columns = df_summary.iloc[2]
-        df_summary = df_summary.iloc[3:].reset_index(drop=True)
-        for _, row in df_summary.iterrows():
-            cursor.execute("""
-                INSERT INTO industry_summary (major_cat, sub_biz, leader, sub_infra, peer, description)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                str(row.get('대분류', '')), str(row.get('주요사업', '')),
-                str(row.get('대표기업·대장 후보', '')), str(row.get('소부장·핵심 인프라', '')),
-                str(row.get('동종·연관 기업', '')), str(row.get('분류 설명', ''))
-            ))
-
-        # 종목별목록 시트 적재 및 candidates 테이블 동기화
-        df_list = pd.read_excel(excel_path, sheet_name='종목별목록', header=2)
-        df_list.columns = df_list.iloc[2]
-        df_list = df_list.iloc[3:].dropna(subset=['종목코드']).reset_index(drop=True)
+        # 1. 전종목목록 시트 적재 (2,649개)
+        df_all = pd.read_excel(excel_path, sheet_name='전종목목록', header=4)
+        df_all.columns = df_all.iloc[0]
+        df_all = df_all.iloc[1:].reset_index(drop=True)
 
         seen_codes = set()
-        for _, row in df_list.iterrows():
-            code = str(row['종목코드']).zfill(6)
-            name = str(row['종목명']).strip()
-            industry = str(row['주요사업']).strip()
-            role = str(row['역할']).strip()
-            market = str(row.get('시장', '코스피')).strip()
+        for _, row in df_all.iterrows():
+            code = str(row.get('종목코드', '')).zfill(6)
+            name = str(row.get('회사명', '')).strip()
+            market = str(row.get('시장', '')).strip()
+            user_ind = str(row.get('사용자 주요사업', '')).strip()
+            role = str(row.get('역할', '')).strip()
+            krx_ind = str(row.get('KRX 업종', '')).strip()
+            krx_prod = str(row.get('KRX 주요제품', '')).strip()
+            basis = str(row.get('사업분류 근거', '')).strip()
+            list_date = str(row.get('상장일', '')).strip()
+            url = str(row.get('원본 URL', '')).strip()
 
             cursor.execute("""
-                INSERT INTO stock_list (major_cat, sub_biz, role, name, code, market, product, customer, level, note, division, source)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                str(row.get('대분류', '')), industry, role, name, code, market,
-                str(row.get('사업·제품', '')), str(row.get('확인된 고객', '')),
-                str(row.get('확인 수준', '')), str(row.get('비고', '')),
-                str(row.get('구분', '')), str(row.get('출처', ''))
-            ))
+                INSERT INTO stock_all_list (market, code, name, user_industry, role, krx_industry, krx_product, classification_basis, listing_date, url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (market, code, name, user_ind, role, krx_ind, krx_prod, basis, list_date, url))
 
             if code not in seen_codes:
                 seen_codes.add(code)
                 record = {
                     "code": code,
                     "name": name,
-                    "industry": industry,
+                    "industry": user_ind if user_ind != 'nan' else krx_ind,
                     "role": role,
                     "market": market,
-                    "score": 92,
+                    "score": 85 if role == '역할 미검증' else 92,
                     "max_score": 95,
-                    "foreign_inst_net": 15000,
+                    "foreign_inst_net": 10000,
                     "metrics": {
-                        "current_price": 75000 if "삼성전자" in name else 120000,
-                        "change_pct": 1.5,
-                        "turnover": 50000000000,
-                        "returns": {"1일": 1.2, "2일": -0.5, "3일": 2.1, "4일": 0.8, "5일": 1.5},
-                        "modal_returns": {"1년": 17.6, "6개월": 33.3, "3개월": 21.9, "1개월": 11.1, "20일": 11.1, "10일": 3.1, "5일": 6.4}
+                        "current_price": 50000,
+                        "change_pct": 0.5,
+                        "turnover": 10000000000,
+                        "returns": {"1일": 0.5, "2일": -0.1, "3일": 1.0, "4일": 0.2, "5일": 0.5},
+                        "modal_returns": {"1년": 10.0, "6개월": 15.0, "3개월": 8.0, "1개월": 3.0}
                     },
-                    "fundamentals": {"per": 14.5, "pbr": 1.4, "roe": 11.2, "dividend_yield": 2.1},
-                    "twenty_metrics": [{"name": "주가등락률", "score": "7/7"}, {"name": "거래대금", "score": "7/7"}],
-                    "ai_briefing": f"{name}({code}) 정밀 퀀트 분석 완료.",
-                    "upside_probability": 85
+                    "fundamentals": {"per": 12.5, "pbr": 1.2, "roe": 10.0, "dividend_yield": 2.0},
+                    "twenty_metrics": [{"name": "주가등락률", "score": "5/7"}, {"name": "거래대금", "score": "5/7"}],
+                    "ai_briefing": f"{name}({code}) 통합 데이터베이스 연동 완료.",
+                    "upside_probability": 80
                 }
                 cursor.execute("""
                     INSERT OR REPLACE INTO candidates (code, name, industry, role, score, max_score, foreign_inst_net, data_json)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (code, name, industry, role, 92, 95, 15000, json.dumps(record, ensure_ascii=False)))
+                """, (code, name, record["industry"], role, record["score"], record["max_score"], record["foreign_inst_net"], json.dumps(record, ensure_ascii=False)))
+
+        # 2. 대표소부장관계 시트 적재
+        df_rep = pd.read_excel(excel_path, sheet_name='대표소부장관계', header=4)
+        df_rep.columns = df_rep.iloc[0]
+        df_rep = df_rep.iloc[1:].reset_index(drop=True)
+        for _, row in df_rep.iterrows():
+            cursor.execute("""
+                INSERT INTO representative_supply (major_cat, sub_biz, legacy_role, code, current_name, market, krx_industry, krx_product, customer, verification, legacy_desc, ref_url)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                str(row.get('대분류', '')), str(row.get('주요사업', '')), str(row.get('기존 역할', '')),
+                str(row.get('종목코드', '')).zfill(6), str(row.get('현재 회사명', '')).strip(),
+                str(row.get('시장', '')), str(row.get('KRX 업종', '')), str(row.get('KRX 주요제품', '')),
+                str(row.get('확인된 고객', '')), str(row.get('관계 검증', '')),
+                str(row.get('기존 설명', '')), str(row.get('참고 URL', ''))
+            ))
+
+        # 3. 분류현황 시트 적재
+        df_cls = pd.read_excel(excel_path, sheet_name='분류현황', header=4)
+        df_cls.columns = df_cls.iloc[0]
+        df_cls = df_cls.iloc[1:].reset_index(drop=True)
+        for _, row in df_cls.iterrows():
+            count_val = row.get('종목 수', 0)
+            try:
+                count_val = int(count_val)
+            except:
+                count_val = 0
+            cursor.execute("""
+                INSERT INTO classification_status (sub_biz, stock_count, classification_method)
+                VALUES (?, ?, ?)
+            """, (
+                str(row.get('주요사업', '')), count_val,
+                str(row.get('분류 방법', ''))
+            ))
 
         conn.commit()
         conn.close()
     except Exception as e:
-        print(f"Excel to DB Load Error: {e}")
+        print(f"Excel Full Load Error: {e}")
 
 def get_all_candidates() -> list[dict]:
     conn = get_connection()
