@@ -50,7 +50,9 @@ def fetch(key):
             row=next((x for x in data if x.get('contract')==contract),None)
             if not row: raise ValueError('해당 계약 없음')
             pct=number(row['change_percentage'])
-            out.update(val=f"{number(row['last']):,.4f} USDT",chg=f'{pct:+.2f}%',up=pct>0,status='정상',basis='Gate 선물 · 24시간 등락')
+            fx=requests.get('https://api.upbit.com/v1/ticker',params={'markets':'KRW-USDT'},timeout=8)
+            fx.raise_for_status(); rate=float(fx.json()[0]['trade_price'])
+            out.update(val=f"{number(row['last'])*rate:,.0f}원 (환산)",chg=f'{pct:+.2f}%',up=pct>0,status='정상',basis='Gate 선물 · 24시간 등락')
         elif key=='crypto_fg':
             r=requests.get('https://api.alternative.me/fng/',timeout=8);r.raise_for_status(); row=r.json()['data'][0]
             out.update(val=row['value'],status=row['value_classification'],basis='일간 지수',source_time=row['timestamp'])
