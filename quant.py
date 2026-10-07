@@ -492,7 +492,12 @@ def _ret(closes: List[float], n: int) -> float:
 
 
 def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
-    hist = fetch_naver_chart(code, headers)
+    import kis
+    use_kis=kis.configured()
+    try:
+        hist = kis.history(code) if use_kis else fetch_naver_chart(code, headers)
+    except RuntimeError:
+        return None
     if len(hist) < 21:
         return None
     now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
@@ -503,9 +508,17 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
     last, prev = hist[-1], hist[-2]
     close_p, open_p, high_p, low_p, vol = last["close"], last["open"], last["high"], last["low"], last["volume"]
     chg = (close_p / prev["close"] - 1) * 100 if prev["close"] > 0 else 0.0
-    deal = close_p * vol
+    deal = last.get("turnover") or close_p * vol
     tech = technical_snapshot(hist)
-    flow = get_real_investor_trend(code, headers)
+    rows=[]
+    if use_kis:
+        try: rows=[r for r in kis.investors(code) if r.get('date') and r['date']<=last['date']]
+        except RuntimeError: pass
+        def qty(row,key): return safe_int(row.get(key))
+        flow=(qty(rows[0],'foreignerPureBuyQuant'),qty(rows[0],'organPureBuyQuant'),0,
+              sum(qty(r,'foreignerPureBuyQuant') for r in rows[:5]),sum(qty(r,'organPureBuyQuant') for r in rows[:5])) if rows and rows[0]['date']==last['date'] else None
+    else:
+        flow = get_real_investor_trend(code, headers)
     flow_ok = flow is not None
     f1, i1, r1, f5, i5 = flow if flow_ok else (0, 0, 0, 0, 0)
     sc = score_20_indicators(chg, close_p, open_p, high_p, low_p, deal, vol, tech, f1, i1, f5, i5)
@@ -535,16 +548,29 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
         "upside_probability": int(min(95, max(5, total / MAX_TOTAL * 90))),  # 점수 기반 단순 환산(통계적 확률 아님)
         "passed_tags": sc["passed_tags"],
     }
-    rows = []
-    try:
-        response = requests.get(f'https://m.stock.naver.com/api/stock/{code}/trend', headers=headers, timeout=INVESTOR_TIMEOUT)
-        response.raise_for_status()
-        js = response.json()
-        rows = js if isinstance(js, list) else (js.get('result') or js.get('message', {}).get('result', []))
-    except (requests.RequestException, ValueError, AttributeError):
-        pass
+    if not use_kis:
+        try:
+            response=requests.get(f'https://m.stock.naver.com/api/stock/{code}/trend',headers=headers,timeout=INVESTOR_TIMEOUT)
+            response.raise_for_status(); js=response.json()
+            rows=js if isinstance(js,list) else js.get('result',[])
+        except (requests.RequestException,ValueError): pass
     from details import enrich
     record = enrich(record, hist, rows)
+    record['data_source']='한국투자증권' if use_kis else '네이버 · 한투 키 미등록'
+    record['schema_version']=2
+    import stock_master
+    master_profile=stock_master.profile(code)
+    record['industry']=master_profile['source_industry'] if master_profile else '기타'
+    record['source_industry']=record['industry']
+    record['industry_source']='한경 원본' if master_profile else '분류 미확보'
+    record['theme']=sector
+
+    if use_kis and rows and rows[0].get('date')==last['date']:
+        # 한투 순매수대금 필드는 백만원 단위. 누락이면 추정금액 유지.
+        for field,target in [('frgn_ntby_tr_pbmn','foreign_net_won'),('orgn_ntby_tr_pbmn','institution_net_won')]:
+            if rows[0].get(field) not in (None,''):
+                record[target]=float(rows[0][field])*1_000_000
+        record['flow_amount_basis']='한투 순매수대금 (백만원→원)' if all(rows[0].get(f) not in (None,'') for f in ['frgn_ntby_tr_pbmn','orgn_ntby_tr_pbmn']) else '수량×확정종가 추정'
     values = [f'{chg:.2f}%', f'{deal/1e8:.2f}억 원 (추정)', f'{tech["volume_ratio"]:.2f}%',
               f'{tech["ma20"]:,.0f}원', f'{sc["gap_52w"]:.2f}%', f'{(close_p/open_p-1)*100:.2f}%' if open_p else '미확보',
               f'{sc["close_position"]:.2f}%', f'{sc["upper_tail_ratio"]:.2f}%',
@@ -561,6 +587,22 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
 
 def build_universe(headers: Dict[str, str]) -> Dict[str, Tuple[str, str]]:
     """섹터 마스터 종목 + 시총 상위 종목의 합집합 {code: (name, market)}"""
+    import stock_master
+    try:
+        master=stock_master.refresh()
+        uni={r['code']:(r['name'],r['market']) for r in master['rows'] if is_pure_stock(r['code'],r['name'])}
+        if uni:
+            db.save_master(uni)
+            db.set_meta('master_status',f"한경 원본 분류 · {len(uni)}종목")
+            return uni
+    except (requests.RequestException,ValueError,OSError):
+        cached=stock_master.read().get('rows',[])
+        if cached:
+            uni={r['code']:(r['name'],r['market']) for r in cached if is_pure_stock(r['code'],r['name'])}
+            db.save_master(uni)
+            db.set_meta('master_status','한경 갱신 실패 · 기존 캐시')
+            return uni
+        db.set_meta('master_status','한경 최초 수집 실패 · 네이버 목록 사용, 분류 미확보')
     uni: Dict[str, Tuple[str, str]] = {c: (n, "") for n, c in TICKER_MAP.items() if c != "000000"}
     for market in ("KOSPI", "KOSDAQ"):
         for page in range(1, STOCK_PAGES + 1):
