@@ -1,4 +1,4 @@
-"""퀀트 엔진: 20지표 점수 계산 + 네이버 데이터 수집 (기존 collector.py에서 Supabase 의존성 제거)"""
+"""퀀트 엔진: 22지표 구성: 가격·거래·수급·추세 기본 계산 + 네이버 데이터 수집 (기존 collector.py에서 Supabase 의존성 제거)"""
 from __future__ import annotations
 import datetime
 import threading
@@ -45,12 +45,10 @@ def safe_int(val, default=0) -> int:
 def is_pure_stock(ticker: str, name: str) -> bool:
     if not ticker or not ticker.isdigit():
         return False
-    if name.endswith(("우", "우B", "우C", "(우)", "우선주")):
-        return False
-    clean = name.upper().replace(" ", "")
-    for kw in EXCLUDE_KEYWORDS:
-        if kw.upper() in clean:
-            return False
+    import re
+    if re.search(r'ETF|ETN|스팩|SPAC',name,re.I):return False
+    prefixes=['KODEX','TIGER','ACE','SOL','RISE','PLUS','KOSEF','ARIRANG','TIMEFOLIO','HANARO','WOORI','UNICORN','KBSTAR','WON','HERO','TRUSTON']
+    if any(name.upper().startswith(prefix+' ') for prefix in prefixes):return False
     return True
 
 
@@ -246,7 +244,7 @@ def grade_from_score(score: int) -> str:
     return "D"
 
 
-def score_20_indicators(
+def score_base_indicators(
     chg: float, close_p: float, open_p: float, high_p: float, low_p: float,
     deal_won: float, current_vol: float, tech: Dict[str, float],
     foreign_1d: int, inst_1d: int, foreign_5d: int, inst_5d: int
@@ -477,12 +475,12 @@ def fetch_stock_page(market: str, page: int, headers: Dict[str, str]) -> List[Di
 
 # ---------------- 통합: 종목 분석 -> UI 레코드 ----------------
 MAXPTS = {"score_01":7,"score_02":7,"score_03":5,"score_04":6,"score_05":4,"score_06":4,"score_07":4,"score_08":3,"score_09":6,"score_10":6,
-          "score_11":5,"score_12":5,"score_13":4,"score_14":5,"score_15":4,"score_16":5,"score_17":5,"score_18":4,"score_19":4,"score_20":3}
+          "score_11":5,"score_12":5,"score_13":4,"score_14":5,"score_15":4,"score_16":5,"score_17":5,"score_18":3,"score_19":3,"score_20":1}
 NAMES = {"score_01":"주가등락률","score_02":"거래대금","score_03":"거래량비율","score_04":"20일이평선","score_05":"주가위치","score_06":"양봉마감","score_07":"고가근접",
          "score_08":"윗꼬리제한","score_09":"단기이평정배열","score_10":"외국인순매수","score_11":"기관순매수","score_12":"순매수비율","score_13":"5일이평선",
          "score_14":"60일이평선","score_15":"120일이평선","score_16":"52주신고가","score_17":"전고점돌파","score_18":"RSI(14)","score_19":"이격도","score_20":"MACD"}
 FLOW_KEYS = ("score_10", "score_11", "score_12")
-MAX_TOTAL = sum(MAXPTS.values())  # 96
+MAX_TOTAL = sum(MAXPTS.values())  # 기본 20항목 92점, 신규 2항목 8점 → 100점
 
 _scan_lock = threading.Lock()
 
@@ -521,8 +519,8 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
         flow = get_real_investor_trend(code, headers)
     flow_ok = flow is not None
     f1, i1, r1, f5, i5 = flow if flow_ok else (0, 0, 0, 0, 0)
-    sc = score_20_indicators(chg, close_p, open_p, high_p, low_p, deal, vol, tech, f1, i1, f5, i5)
-    raw = {k: sc[k] for k in MAXPTS}
+    sc = score_base_indicators(chg, close_p, open_p, high_p, low_p, deal, vol, tech, f1, i1, f5, i5)
+    raw = {k: min(sc[k], MAXPTS[k]) for k in MAXPTS}
     if flow_ok:
         total = sc["total_score"]
     else:  # 수급 조회 실패 시 수급 3개 지표를 빼고 같은 만점(96) 기준으로 환산 (실패가 점수를 올리지 않도록)
@@ -543,8 +541,8 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
                               "20일": _ret(closes, 20), "10일": _ret(closes, 10), "5일": _ret(closes, 5)},
         },
         "fundamentals": {"per": 0, "pbr": 0, "roe": 0, "dividend_yield": 0},  # 별도 데이터 소스 필요
-        "twenty_metrics": [{"name": NAMES[k], "score": f"{raw[k]}/{MAXPTS[k]}"} for k in MAXPTS],
-        "ai_briefing": f"{name}: 20개 지표 중 {len(tags)}개 충족({', '.join(tags[:5]) or '없음'}). 점수 {int(total)}/{MAX_TOTAL}{note}",
+        "indicator_metrics": [{"name": NAMES[k], "score": f"{raw[k]}/{MAXPTS[k]}"} for k in MAXPTS],
+        "ai_briefing": f"{name}: 기본 지표 중 {len(tags)}개 충족({', '.join(tags[:5]) or '없음'}). 점수 {int(total)}/{MAX_TOTAL}{note}",
         "upside_probability": int(min(95, max(5, total / MAX_TOTAL * 90))),  # 점수 기반 단순 환산(통계적 확률 아님)
         "passed_tags": sc["passed_tags"],
     }
@@ -557,7 +555,11 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
     from details import enrich
     record = enrich(record, hist, rows)
     record['data_source']='한국투자증권' if use_kis else '네이버 · 한투 키 미등록'
-    record['schema_version']=2
+    record['schema_version']=4
+    import research
+    record['chart_details']=research.chart(hist)
+    record['flow_periods']=research.flow_windows(rows) if use_kis else {}
+    record['grade']='미확정'
     import stock_master
     master_profile=stock_master.profile(code)
     record['industry']=master_profile['source_industry'] if master_profile else '기타'
@@ -580,7 +582,7 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
               f'{tech["ma5"]:.0f}원', f'{tech["ma60"]:.0f}원', f'{tech["ma120"]:.0f}원',
               f'{tech["high_52w"]:.0f}원', f'{tech["previous_high_60"]:.0f}원',
               f'{tech["rsi14"]:.2f}', f'{tech["disparity20"]:.2f}%', f'{tech["macd"]:.2f}']
-    for metric,value in zip(record['twenty_metrics'], values):
+    for metric,value in zip(record['indicator_metrics'], values):
         metric['value'] = value
     return record
 
