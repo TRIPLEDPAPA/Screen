@@ -463,28 +463,18 @@
                     const m = data.market.macro;
                     for (const [key, obj] of Object.entries(m)) {
                         const el = document.getElementById('macro-' + key);
-                        if (el) el.innerHTML = `${obj.val} <span class="${obj.up ? 'text-rose-400' : 'text-sky-400'} text-[10px]">${obj.chg}</span>`;
+                        if (el) renderIndicator(el,obj);
                     }
 
                     const n = data.market.night;
                     for (const [key, obj] of Object.entries(n)) {
                         const el = document.getElementById('night-' + key);
-                        if (el) {
-                            if (obj.status) {
-                                el.innerText = `${obj.val} (${obj.status})`;
-                            } else {
-                                el.innerHTML = `${obj.val} <span class="${obj.up ? 'text-rose-400' : 'text-sky-400'} text-[10px]">${obj.chg}</span>`;
-                            }
-                        }
+                        if (el) renderNightQuote(el,obj);
                     }
 
-                    const b = data.market.bonds;
-                    if (b) {
-                        const b2 = document.getElementById('bond-2y'); if(b2) b2.innerText = b.yield_2y.val;
-                        const b5 = document.getElementById('bond-5y'); if(b5) b5.innerText = b.yield_5y.val;
-                        const b10 = document.getElementById('bond-10y'); if(b10) b10.innerText = b.yield_10y.val;
-                        const b30 = document.getElementById('bond-30y'); if(b30) b30.innerText = b.yield_30y.val;
-                    }
+                    const b=data.market.bonds;
+                    if(b) for(const [key,obj] of Object.entries(b)){const el=document.getElementById('bond-'+key.replace('yield_',''));if(el)renderIndicator(el,obj);}
+
                 }
 
                 if (data.results) {
@@ -740,7 +730,7 @@
                 <div><div class="text-gray-400 text-[10px]">배당수익률</div><div class="font-bold text-cyan-400 mt-0.5">${f.dividend_yield ?? '미확보'}%</div></div>
             `;
 
-            const tm = item.twenty_metrics || [];
+            const tm = item.indicator_metrics || [];
             let tmHtml = '';
             if (tm.length > 0) {
                 tm.forEach(m => {
