@@ -79,8 +79,17 @@ def fetch(key):
                 out.update(val=price.get_text(strip=True),chg=f'{pct:+.2f}%',up=pct>0,status='지연 여부 미확인',basis='출처 표기 기준')
             else:
                 out['status']='출처 파싱 미확인 · 미확보'
-    except (requests.RequestException,ValueError,TypeError,KeyError,IndexError):
-        out['status']='조회 실패 · 미확보'
+    except requests.HTTPError as e:
+        code=e.response.status_code if e.response is not None else None
+        out.update(status=f'출처 HTTP {code} · 미확보',error_type='http',http_status=code)
+    except requests.Timeout:
+        out.update(status='출처 응답 시간초과 · 미확보',error_type='timeout')
+    except requests.ConnectionError:
+        out.update(status='출처 연결 실패 · 미확보',error_type='connection')
+    except requests.RequestException:
+        out.update(status='출처 통신 실패 · 미확보',error_type='request')
+    except (ValueError,TypeError,KeyError,IndexError) as e:
+        out.update(status='출처 데이터 해석 실패 · 미확보',error_type=type(e).__name__)
     return key,group,out
 
 def refresh():
@@ -92,7 +101,7 @@ def refresh():
             for key,row in rows.items():
                 previous=_cache.get(group,{}).get(key)
                 if row['val']=='미확보' and previous and previous['val']!='미확보':
-                    row={**previous,'status':'갱신 실패 · 이전 값','attempted_at':row['fetched_at']}
+                    row={**previous,'status':'갱신 실패 · 이전 값 · '+row['status'],'attempted_at':row['fetched_at'],'last_error_type':row.get('error_type'),'last_http_status':row.get('http_status')}
                 _cache.setdefault(group,{})[key]=row
 
 def snapshot():
