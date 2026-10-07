@@ -17,6 +17,8 @@ import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI, Query
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse
+import json
 from pydantic import BaseModel
 
 load_dotenv()
@@ -24,6 +26,7 @@ load_dotenv()
 import db      # noqa: E402
 import dart    # noqa: E402
 import quant   # noqa: E402
+import market_data
 from tick import engine as tick_engine  # noqa: E402
 
 def get_kst_time() -> tuple[dt.datetime, str]:
@@ -34,39 +37,8 @@ def get_kst_time() -> tuple[dt.datetime, str]:
     ampm = "오후" if now_kst.hour >= 12 else "오전"
     return now_kst, f"{ampm} {hour_12:02d}:{now_kst.minute:02d}"
 
-def fetch_all_market_indicators() -> dict[str, Any]:
-    return {
-        "macro": {
-            "usdkrw": {"val": "1,385.50", "chg": "+0.35%", "up": True},
-            "kospi200_fut": {"val": "362.40", "chg": "+0.82%", "up": True},
-            "kospi": {"val": "2,582.10", "chg": "+0.61%", "up": True},
-            "kosdaq": {"val": "752.30", "chg": "-0.24%", "up": False},
-            "spx": {"val": "5,633.12", "chg": "+0.45%", "up": True},
-            "dji": {"val": "41,393.78", "chg": "+0.18%", "up": True},
-            "nasdaq": {"val": "17,683.98", "chg": "+0.76%", "up": True},
-            "wti": {"val": "$71.55", "chg": "+1.22%", "up": True},
-            "brent": {"val": "$75.12", "chg": "+1.05%", "up": True},
-            "copper": {"val": "$4.32", "chg": "-0.15%", "up": False},
-            "corn": {"val": "$418.50", "chg": "+0.40%", "up": True},
-            "btc": {"val": "128,450,000", "chg": "+2.15%", "up": True},
-            "eth": {"val": "4,950,000", "chg": "+3.40%", "up": True},
-            "xrp": {"val": "3,450", "chg": "+1.80%", "up": True},
-        },
-        "night": {
-            "samsung": {"val": "261,500", "chg": "+1.42%", "up": True},
-            "hynix": {"val": "1,795,000", "chg": "+0.89%", "up": True},
-            "hyundai": {"val": "372,000", "chg": "+0.54%", "up": True},
-            "samsungem": {"val": "1,350,000", "chg": "-1.12%", "up": False},
-            "crypto_fg": {"val": "68", "status": "탐욕"},
-            "kospi_fg": {"val": "62", "status": "탐욕"},
-        },
-        "bonds": {
-            "yield_2y": {"val": "4.18%", "chg": "-0.03"},
-            "yield_5y": {"val": "4.12%", "chg": "-0.02"},
-            "yield_10y": {"val": "4.22%", "chg": "+0.01"},
-            "yield_30y": {"val": "4.45%", "chg": "+0.02"}
-        }
-    }
+def fetch_all_market_indicators():
+    return market_data.snapshot()
 
 
 def scan_job(label: str):
@@ -101,12 +73,14 @@ async def lifespan(app: FastAPI):
         start_async(scan_job, "초기 부팅 스캔")
     start_async(dart.sync, True)       # 공시 당일분 백필
     tick_engine.start()
+    start_async(market_data.refresh)
 
     sch = BackgroundScheduler(timezone="Asia/Seoul")
     kw = dict(max_instances=1, coalesce=True)
-    sch.add_job(lambda: scan_job("새벽 정기 스캔"), CronTrigger(hour=3, minute=0), **kw)
-    sch.add_job(lambda: scan_job("장중 스캔"), CronTrigger(day_of_week="mon-fri", hour="9-15", minute="5,35"), **kw)
-    sch.add_job(lambda: scan_job("장마감 스캔"), CronTrigger(day_of_week="mon-fri", hour=15, minute=45), **kw)
+    sch.add_job(market_data.refresh, IntervalTrigger(seconds=60), **kw)
+    sch.add_job(lambda: scan_job("새벽 정기 스캔"), CronTrigger(hour=3, minute=0, timezone='Asia/Seoul'), **kw)
+    sch.add_job(lambda: scan_job("장중 스캔"), CronTrigger(day_of_week="mon-fri", hour="9-15", minute="5,35", timezone='Asia/Seoul'), **kw)
+    sch.add_job(lambda: scan_job("장마감 스캔"), CronTrigger(day_of_week="mon-fri", hour=15, minute=45, timezone='Asia/Seoul'), **kw)
     sch.add_job(dart.sync, IntervalTrigger(seconds=30), **kw)   # 실시간 공시 30초 갱신
     sch.add_job(keepalive, IntervalTrigger(minutes=8), **kw)    # 잠들지 않게 8분마다 자기 호출
     sch.start()
@@ -115,6 +89,28 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Money Flow", lifespan=lifespan)
+
+@app.get('/revision.js')
+def revision_script():
+    return FileResponse(Path(__file__).parent/'revision.js',media_type='application/javascript')
+
+@app.get('/guide.html')
+def guide():
+    return FileResponse(Path(__file__).parent/'guide.html',media_type='text/html')
+
+@app.get('/api/market')
+def market():
+    return market_data.snapshot()
+
+@app.get('/api/calendar/month')
+def month_calendar(month: str = Query(pattern=r'^\d{4}-\d{2}$'), category: str = 'economic'):
+    path=Path(__file__).parent/'calendar_events.json'
+    try:
+        events=json.loads(path.read_text()) if path.exists() else []
+        data=[x for x in events if x.get('category')==category and str(x.get('date','')).startswith(month)]
+        return {'data':data,'status':'등록된 출처 기반 일정' if data else '일정 데이터 미연결'}
+    except (ValueError,TypeError):
+        return JSONResponse({'data':[],'status':'일정 파일 형식 오류'},status_code=503)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -142,7 +138,21 @@ async def api_scan(force: bool = Query(False)):
     candidates = db.get_all_candidates()
     _, time_str = get_kst_time()
     return JSONResponse({"time_str": db.get_meta("base_time", time_str), "count": len(candidates),
-                         "results": candidates, "market": fetch_all_market_indicators()})
+                         "results": candidates[:100], "market": market_data.snapshot(), 'scan_status': db.get_meta('scan_status')})
+
+@app.get('/api/search')
+def search(q: str = Query(min_length=1, max_length=80)):
+    analyzed={r['code']:r for r in db.get_all_candidates()}
+    return {'results':[analyzed.get(r['code'], {**r,'analysis_pending':True}) for r in db.search_master(q)]}
+
+@app.post('/api/analyze/{code}')
+def analyze_one(code: str):
+    rows=[r for r in db.search_master(code) if r['code']==code]
+    if not rows: return JSONResponse({'error':'등록되지 않은 종목'},status_code=404)
+    result=quant.analyze(code,rows[0]['name'],quant.get_headers())
+    if not result: return JSONResponse({'error':'일봉 수집 실패 또는 데이터 부족'},status_code=503)
+    db.upsert_candidates_bulk([result],get_kst_time()[0].strftime('%H:%M'))
+    return result
 
 
 @app.get("/api/disclosures")
@@ -173,22 +183,9 @@ def set_tick_condition(c: TickCond):
 
 
 @app.get("/api/calendar/economic")
-def get_economic_calendar(week: str = ""):
-    # 2026~2030년 어떤 주차가 요청되더라도 에러 없이 대응 가능한 동적 매핑
-    sample_events = []
-    if "2026년 9월" in week:
-        sample_events = [
-            {
-                "id": "eco_1", "category": "economic", "week_label": week, 
-                "date": "09.17", "time": "03:00", "title": "미국 기준금리 결정(상단)", 
-                "country": "🇺🇸", "tag": "금리 결정", "tag_color": "text-blue-400 bg-blue-950/50 border-blue-800/50", 
-                "actual": "4.25%", "forecast": "4.25%", "source": "Federal Reserve", 
-                "ai_summary": "연준이 금리 목표범위를 유지하며 물가안정을 재확인했습니다.", 
-                "guide": {"title": "미국 기준금리", "desc": "연방공개시장위원회(FOMC)에서 결정되는 기준금리"}
-            }
-        ]
-    return {"status": "success", "data": sample_events, "week": week}
+def economic_calendar(week: str = ""):
+    return {"data": [], "status": "월별 API 사용 · 일정 데이터 미연결"}
 
 @app.get("/api/calendar/earnings")
-def get_earnings_calendar(week: str = ""):
-    return {"status": "success", "data": [], "week": week}
+def earnings_calendar(week: str = ""):
+    return {"data": [], "status": "월별 API 사용 · 일정 데이터 미연결"}
