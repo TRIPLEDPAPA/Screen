@@ -28,7 +28,7 @@ def request(path,tr_id,params):
     with _lock:
         try:
             if not _token or time.time()>_expiry:
-                if time.time()<_auth_retry_after: raise RuntimeError(_state['status']+' · 인증 재시도 대기')
+                if time.time()<_auth_retry_after: raise RuntimeError(_state['status'])
                 r=requests.post(base+'/oauth2/tokenP',json={'grant_type':'client_credentials','appkey':key,'appsecret':secret},timeout=12)
                 if not r.ok:
                     _auth_retry_after=time.time()+65
