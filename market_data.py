@@ -4,6 +4,7 @@ import threading
 from concurrent.futures import ThreadPoolExecutor
 import requests
 from bs4 import BeautifulSoup
+import source_parsers
 
 SOURCES={
  'usdkrw':('macro','https://www.google.com/finance/beta/quote/USD-KRW'),
@@ -42,6 +43,7 @@ def fetch(key):
             r=requests.get('https://api.upbit.com/v1/ticker',params={'markets':'KRW-'+key.upper()},timeout=8)
             r.raise_for_status(); data=r.json()[0]
             price=data['trade_price']; pct=data['signed_change_rate']*100
+            out['diff']=data.get('signed_change_price')
             out.update(val=f'{price:,.0f}원',chg=f'{pct:+.2f}%',up=pct>0,status='정상',basis='Upbit 전일 기준',source_time=data.get('timestamp'))
         elif key in ['samsung','hynix','hyundai','samsungem']:
             contract=url.rsplit('/',1)[-1]
@@ -58,9 +60,19 @@ def fetch(key):
             out.update(val=row['value'],status=row['value_classification'],basis='일간 지수',source_time=row['timestamp'])
         else:
             r=requests.get(url,headers={'User-Agent':'Mozilla/5.0'},timeout=8);r.raise_for_status()
+            if group=='bonds':
+                out.update(source_parsers.bond(r.text));return key,group,out
+            if key=='kospi_fg':
+                out.update(source_parsers.kospi_fear(r.text));return key,group,out
+            if key=='usdkrw':
+                out.update(source_parsers.google_fx(r.text));return key,group,out
             soup=BeautifulSoup(r.text,'html.parser')
             # 명시적인 데이터 필드만 사용. 페이지 내 임의 숫자 추출 금지.
             price=soup.select_one('[data-test="instrument-price-last"]')
+            diff=soup.select_one('[data-test="instrument-price-change"]')
+            if diff:
+                try: out['diff']=number(diff.get_text())
+                except ValueError: pass
             change=soup.select_one('[data-test="instrument-price-change-percent"]')
             if price and change:
                 pct=number(change.get_text().replace('(','').replace(')',''))
