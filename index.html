@@ -30,22 +30,14 @@
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
-</head>
+<style>.score-high{color:#fbbf24!important;background:#453819}.calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}.calendar-day{min-height:75px;padding:5px;border:1px solid #334155;font-size:11px}.calendar-day button{white-space:normal;text-align:left;color:#67e8f9}</style></head>
 <body class="min-h-screen flex flex-col p-4 md:p-6 space-y-6">
 
     <!-- 고정 상단 네비게이션 탭 메뉴 -->
     <header class="border-b border-slate-800 bg-slate-950 sticky top-0 z-50 -mx-4 -mt-4 md:-mx-6 md:-mt-6 px-4 md:px-6 h-14 flex items-center justify-between gap-4">
         <div class="flex items-center gap-4 overflow-x-auto no-scrollbar py-2 w-full">
             <span class="text-base font-bold tracking-tight text-cyan-400 shrink-0">⚡ Money Flow</span>
-            <nav class="flex gap-4 text-sm font-medium text-slate-300 shrink-0">
-                <button onclick="switchTab('home')" id="nav-home" class="nav-btn text-cyan-400 font-semibold pb-1 border-b-2 border-cyan-400 whitespace-nowrap">홈</button>
-                <button onclick="switchTab('tick')" id="nav-tick" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">틱검색</button>
-                <button onclick="switchTab('feed')" id="nav-feed" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">실시간 공지</button>
-                <button onclick="switchTab('money')" id="nav-money" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">MONEY FLOW</button>
-                <button onclick="switchTab('calendar')" id="nav-calendar" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">MONEY갤린더</button>
-                <button onclick="switchTab('buyback')" id="nav-buyback" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">자사주소각</button>
-                <button onclick="switchTab('notice')" id="nav-notice" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">공지</button>
-            </nav>
+            <nav class="flex gap-4 text-sm font-medium text-slate-300 shrink-0"><button onclick="switchTab('home')" id="nav-home" class="nav-btn text-cyan-400 font-semibold pb-1 border-b-2 border-cyan-400 whitespace-nowrap">홈</button><button onclick="switchTab('money')" id="nav-money" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">MONEY FLOW</button><button onclick="switchTab('tick')" id="nav-tick" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">틱검색</button><button onclick="switchTab('feed')" id="nav-feed" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">실시간 공시</button><button onclick="switchTab('calendar')" id="nav-calendar" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">MONEY갤린더</button><button onclick="switchTab('notice')" id="nav-notice" class="nav-btn hover:text-cyan-400 pb-1 whitespace-nowrap">공지</button></nav>
         </div>
     </header>
 
@@ -89,20 +81,20 @@
             <div class="card p-4 rounded-xl">
                 <div class="text-xs font-bold text-emerald-400 mb-3 flex items-center gap-1.5"><span>미국 국채 금리</span></div>
                 <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-center">
-                    <a href="https://datacenter.hankyung.com/rates-bonds" target="_blank" class="card card-link p-3 rounded-lg"><div class="text-[10px] text-gray-400 mb-1">미국 국채 2년</div><div class="text-sm font-black text-white mt-1" id="bond-2y">-- %</div></a>
-                    <a href="https://datacenter.hankyung.com/rates-bonds" target="_blank" class="card card-link p-3 rounded-lg"><div class="text-[10px] text-gray-400 mb-1">미국 국채 5년</div><div class="text-sm font-black text-white mt-1" id="bond-5y">-- %</div></a>
-                    <a href="https://datacenter.hankyung.com/rates-bonds" target="_blank" class="card card-link p-3 rounded-lg"><div class="text-[10px] text-gray-400 mb-1">미국 국채 10년</div><div class="text-sm font-black text-white mt-1" id="bond-10y">-- %</div></a>
-                    <a href="https://datacenter.hankyung.com/rates-bonds" target="_blank" class="card card-link p-3 rounded-lg"><div class="text-[10px] text-gray-400 mb-1">미국 국채 30년</div><div class="text-sm font-black text-white mt-1" id="bond-30y">-- %</div></a>
+                    <a href="https://datacenter.hankyung.com/rates-bonds/us2yy" target="_blank" class="card card-link p-3 rounded-lg"><div class="text-[10px] text-gray-400 mb-1">미국 국채 2년</div><div class="text-sm font-black text-white mt-1" id="bond-2y">-- %</div></a>
+                    <a href="https://datacenter.hankyung.com/rates-bonds/us5yy" target="_blank" class="card card-link p-3 rounded-lg"><div class="text-[10px] text-gray-400 mb-1">미국 국채 5년</div><div class="text-sm font-black text-white mt-1" id="bond-5y">-- %</div></a>
+                    <a href="https://datacenter.hankyung.com/rates-bonds/us10yy" target="_blank" class="card card-link p-3 rounded-lg"><div class="text-[10px] text-gray-400 mb-1">미국 국채 10년</div><div class="text-sm font-black text-white mt-1" id="bond-10y">-- %</div></a>
+                    <a href="https://datacenter.hankyung.com/rates-bonds/us30yy" target="_blank" class="card card-link p-3 rounded-lg"><div class="text-[10px] text-gray-400 mb-1">미국 국채 30년</div><div class="text-sm font-black text-white mt-1" id="bond-30y">-- %</div></a>
                 </div>
             </div>
         </section>
 
-        <!-- [ 실시간 공지·공시 탭 ] -->
+        <!-- [ 실시간 공시·공시 탭 ] -->
         <section id="tab-feed" class="tab-content hidden space-y-4">
             <div class="card p-5 rounded-xl shadow-sm space-y-4">
                 <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                     <div>
-                        <h2 class="text-base font-bold text-white">실시간 공지 · DART 공시</h2>
+                        <h2 class="text-base font-bold text-white">실시간 공시 · DART 공시</h2>
                         <div class="text-xs text-slate-400 mt-0.5" id="feed-meta">불러오는 중...</div>
                     </div>
                     <span class="text-xs text-emerald-400 font-medium">● 30초 자동 갱신 <span id="feed-timer" class="text-slate-400">30</span>s</span>
@@ -125,7 +117,7 @@
                     <div class="card p-4 rounded-xl mb-4">
                         <div class="text-xs text-gray-400 mb-1">⚡ 전체 시장 스캔 상태</div>
                         <div class="text-lg font-bold text-white tracking-tight">코스피·코스닥 전 종목 순회</div>
-                        <div class="text-xs text-gray-500 mt-1">2,500여 개 대상 청크 적재 활성화</div>
+                        <div class="text-xs text-gray-500 mt-1">전체 종목 등록 · 분석 완료만 기본 표시</div>
                     </div>
                     <div class="card p-4 rounded-xl mb-4 flex items-center justify-between">
                         <div>
@@ -139,7 +131,7 @@
                     <div class="card p-4 rounded-xl mb-4 flex items-center justify-between">
                         <div>
                             <div class="text-xs text-gray-400 mb-1">📖 시스템 가이드</div>
-                            <div class="text-xs font-bold text-indigo-300">20개 지표 사용설명서</div>
+                            <div class="text-xs font-bold text-indigo-300">22개 지표 사용설명서</div>
                         </div>
                         <button onclick="openManualModal()" class="bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/40 rounded-lg px-2.5 py-1.5 text-xs font-semibold">열기</button>
                     </div>
@@ -154,8 +146,8 @@
                         <div class="text-xs text-cyan-400 mb-3 font-medium">거래대금 기준 상위 산업 집계</div>
                         <div class="bg-[#121c33] border border-cyan-500/30 p-3 rounded-lg mb-3 text-xs text-gray-300 space-y-1">
                             <div class="font-bold text-cyan-400 flex items-center gap-1 mb-1"><span>📡 오늘의 시장 신호</span></div>
-                            <div>• 주도 섹터: <span class="text-amber-400 font-semibold">반도체 / 배터리</span></div>
-                            <div>• 20개 지표 채점: <span class="text-emerald-400 font-semibold">95점 만점 실시간</span></div>
+                            <div>• 주도 섹터: <span class="text-amber-400 font-semibold">실제 거래대금 집계 기준</span></div>
+                            <div>• 22개 지표 채점: <span class="text-emerald-400 font-semibold">100점 만점 · 미확정 기준 별도 표시</span></div>
                         </div>
                         <div id="industry-list" class="space-y-2 max-h-[350px] overflow-y-auto">
                             <div class="text-xs text-gray-500 py-4 text-center">산업 집계 중...</div>
@@ -172,7 +164,7 @@
                                     <span class="text-cyan-400" id="table-total-count">0종목</span>
                                     <button id="btn-reset-filter" onclick="clearIndustryFilter()" class="hidden ml-2 text-xs bg-gray-800 text-gray-300 px-2 py-0.5 rounded border border-gray-700">전체보기 ✕</button>
                                 </h2>
-                                <div class="text-xs text-amber-400/90 mt-0.5">전 종목 2,500개 대상 20개 정밀 퀀트 채점 결과</div>
+                                <div class="text-xs text-amber-400/90 mt-0.5">분석 완료 종목 · 전체 종목은 검색으로 조회</div>
                             </div>
                             <div class="flex flex-wrap items-center gap-2">
                                 <div class="relative">
@@ -192,20 +184,20 @@
                                     <tr class="border-b border-gray-800">
                                         <th class="py-3 px-3">종목</th>
                                         <th class="py-3 px-3 text-center">역할</th>
-                                        <th class="py-3 px-3 text-center">점수(95)</th>
+                                        <th class="py-3 px-3 text-center">점수(100)</th>
                                         <th class="py-3 px-3 text-right">현재가</th>
                                         <th class="py-3 px-3 text-right">1일</th>
                                         <th class="py-3 px-3 text-right">2일</th>
                                         <th class="py-3 px-3 text-right">3일</th>
-                                        <th class="py-3 px-3 text-right">4일</th>
-                                        <th class="py-3 px-3 text-right">5일</th>
+                                        
+                                        
                                         <th class="py-3 px-3 text-right">거래대금</th>
-                                        <th class="py-3 px-3 text-right">외인+기관 수급</th>
+                                        <th class="py-3 px-3 text-right">외국인 (억원)</th><th class="py-3 px-3 text-right">기관 (억원)</th>
                                         <th class="py-3 px-3 text-center">분석</th>
                                     </tr>
                                 </thead>
                                 <tbody id="stock-tbody">
-                                    <tr><td colspan="12" class="py-12 text-center text-gray-500">데이터 로딩 중...</td></tr>
+                                    <tr><td colspan="11" class="py-12 text-center text-gray-500">데이터 로딩 중...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -297,13 +289,11 @@
 
                     <div class="border-t border-slate-800 pt-4 text-xs text-slate-400 flex justify-between">
                         <span>🔄 발표 시각 전후로 실시간 자동 갱신됩니다.</span>
-                        <span class="text-emerald-400">상태: 정상 연결</span>
+                        <span class="text-emerald-400">상태: 실제 일정 연결 대기</span>
                     </div>
                 </div>
             </div>
         </section>
-
-        <section id="tab-buyback" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">자사주소각 영역</div></section>
         <section id="tab-notice" class="tab-content hidden space-y-4"><div class="card p-5 rounded-xl">공지사항 영역</div></section>
 
     </main>
@@ -312,12 +302,12 @@
     <div id="manual-modal" class="fixed inset-0 bg-black/85 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
         <div class="card max-w-2xl w-full rounded-2xl p-6 border border-gray-700 max-h-[90vh] overflow-y-auto">
             <div class="flex items-center justify-between pb-3 border-b border-gray-800 mb-4">
-                <h3 class="text-xl font-bold text-white flex items-center gap-2">📖 20개 정밀 지표 퀀트 스크리너 사용설명서</h3>
+                <h3 class="text-xl font-bold text-white flex items-center gap-2">📖 22개 정밀 지표 퀀트 스크리너 사용설명서</h3>
                 <button onclick="closeManualModal()" class="text-gray-400 hover:text-white text-xl">✕</button>
             </div>
             <div class="space-y-4 text-xs text-gray-300 leading-relaxed">
                 <div class="bg-[#142036] p-3 rounded-lg">
-                    <div class="font-bold text-cyan-400 mb-1 text-sm">1. 전 종목 2,500개 순차 스캔 및 청크 저장</div>
+                    <div class="font-bold text-cyan-400 mb-1 text-sm">1. 전체 종목 등록 및 분석 완료 표시</div>
                     <p>• 코스피와 코스닥 전 상장 종목을 페이징 단위로 끝까지 순회하여 백그라운드 스레드에서 점진적으로 DB에 적재합니다.</p>
                 </div>
             </div>
@@ -335,7 +325,7 @@
                 <div class="flex items-center gap-4">
                     <div class="text-right">
                         <div class="text-xs text-gray-400">정밀 퀀트 총점</div>
-                        <div class="text-2xl font-black text-cyan-400" id="modal-score">0 / 95</div>
+                        <div class="text-2xl font-black text-cyan-400" id="modal-score">0 / 100</div>
                     </div>
                     <button onclick="closeModal()" class="text-gray-400 hover:text-white text-2xl">✕</button>
                 </div>
@@ -345,10 +335,10 @@
                 <div class="bg-cyan-950/30 border border-cyan-800/40 rounded-xl p-4">
                     <div class="flex items-center justify-between mb-3">
                         <span class="text-xs font-bold text-cyan-400">📊 AI & 실데이터 심층 종합 브리핑</span>
-                        <span class="text-xs text-emerald-400 font-semibold" id="modal-upside-badge">상승 가능성: 85%</span>
+                        <span class="text-xs text-emerald-400 font-semibold" id="modal-upside-badge">상승 확률 미산출</span>
                     </div>
                     <div class="w-full bg-gray-800 h-2 rounded-full overflow-hidden mb-3">
-                        <div class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-500" id="modal-prob-bar" style="width: 85%"></div>
+                        <div class="bg-gradient-to-r from-cyan-500 to-emerald-400 h-full transition-all duration-500" id="modal-prob-bar" style="width: 0%"></div>
                     </div>
                     <p class="text-xs text-gray-300 leading-relaxed" id="modal-ai-briefing">분석 중...</p>
                 </div>
@@ -358,7 +348,7 @@
                         <span>📈 기간별 수익률 (상세)</span>
                         <span class="text-[10px] text-gray-500">기준가격 대비 수학적 산출</span>
                     </div>
-                    <div class="grid grid-cols-7 gap-1.5 text-center text-xs mb-3" id="modal-returns-grid"></div>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-center text-xs mb-3" id="modal-returns-grid"></div>
                 </div>
 
                 <div>
@@ -367,7 +357,7 @@
                 </div>
 
                 <div>
-                    <div class="text-xs font-bold text-gray-300 mb-2">🎯 20개 정밀 채점 내역 (95점 만점)</div>
+                    <div class="text-xs font-bold text-gray-300 mb-2">🎯 22개 정밀 채점 내역 (100점 만점)</div>
                     <div class="grid grid-cols-2 md:grid-cols-4 gap-2 text-xs bg-[#0d1527] p-3 rounded-lg" id="modal-20-metrics"></div>
                 </div>
 
@@ -497,7 +487,7 @@
                     }
                 }
 
-                if (data.results && data.results.length > 0) {
+                if (data.results) {
                     rawStocks = data.results;
                     renderTable();
                     renderIndustryFlow();
@@ -547,7 +537,7 @@
 
         function handleSearch(query) {
             searchQuery = query.trim().toLowerCase();
-            renderTable();
+            searchAll(query);
         }
 
         function selectIndustry(ind) {
@@ -637,7 +627,7 @@
             if (searchQuery) filtered = filtered.filter(x => x.name.toLowerCase().includes(searchQuery) || x.code.includes(searchQuery));
 
             if (filtered.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="12" class="py-12 text-center text-gray-400">검색되거나 조건에 맞는 종목이 없습니다.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="11" class="py-12 text-center text-gray-400">검색되거나 조건에 맞는 종목이 없습니다.</td></tr>`;
                 return;
             }
 
@@ -665,20 +655,20 @@
                                 ${item.role} ${item.role === '대장주' ? '▾' : ''}
                             </button>
                         </td>
-                        <td class="py-3 px-3 text-center font-bold text-cyan-400">${item.score || 0}</td>
+                        <td class="py-3 px-3 text-center font-bold text-cyan-400 ${item.score >= 80 ? 'score-high' : ''}">${item.score ?? '미확정'}</td>
                         <td class="py-3 px-3 text-right">
                             <div class="font-semibold text-white" id="price-${item.code}">${(m.current_price || 0).toLocaleString()}</div>
                             <div class="text-xs ${priceColor}" id="chg-${item.code}">${priceChange > 0 ? '▲' : (priceChange < 0 ? '▼' : '')}${Math.abs(priceChange).toFixed(2)}%</div>
                         </td>
-                        <td class="py-3 px-3 text-right">${formatPct(r['1일'])}</td>
-                        <td class="py-3 px-3 text-right">${formatPct(r['2일'])}</td>
-                        <td class="py-3 px-3 text-right">${formatPct(r['3일'])}</td>
-                        <td class="py-3 px-3 text-right">${formatPct(r['4일'])}</td>
-                        <td class="py-3 px-3 text-right">${formatPct(r['5일'])}</td>
+                        <td class="py-3 px-3 text-right">${dailyCell(m.daily_closes?.[0])}</td>
+                        <td class="py-3 px-3 text-right">${dailyCell(m.daily_closes?.[1])}</td>
+                        <td class="py-3 px-3 text-right">${dailyCell(m.daily_closes?.[2])}</td>
+                        
+                        
                         <td class="py-3 px-3 text-right font-medium text-gray-200">${Math.round((m.turnover || 0)/100000000).toLocaleString()}억</td>
-                        <td class="py-3 px-3 text-right">${formatNetQty(item.foreign_inst_net)}</td>
+                        <td class="py-3 px-3 text-right">${flowMoney(item.foreign_net_won,item.flow_amount_basis)}</td><td class="py-3 px-3 text-right">${flowMoney(item.institution_net_won,item.flow_amount_basis)}</td>
                         <td class="py-3 px-3 text-center">
-                            <button onclick="openModal('${item.code}')" class="btn-detail">상세분석</button>
+                            <button onclick="${item.analysis_pending ? 'requestAnalysis' : 'openModal'}('${item.code}')" class="btn-detail">${item.analysis_pending ? '분석하기' : '상세분석'}</button>
                         </td>
                     </tr>
                 `;
@@ -687,7 +677,7 @@
                     const subStocks = rawStocks.filter(x => x.industry === item.industry && x.code !== item.code);
                     html += `
                         <tr class="subtable-row">
-                            <td colspan="12" class="p-5">
+                            <td colspan="11" class="p-5">
                                 <div class="flex items-center justify-between mb-3 pb-2 border-b border-amber-500/30">
                                     <div class="text-xs font-bold text-amber-400">👑 [${item.name}] 대장주 연계 밸류체인 머니 플로우 맵</div>
                                     <div class="text-[11px] text-cyan-300 font-medium">자금 확산 순서: 직접 수혜 ➔ 이후 수혜 ➔ 후발 수혜</div>
@@ -703,7 +693,7 @@
                                         <span class="font-bold text-white text-xs">${sub.name}</span>
                                         <span class="${getRoleBadgeClass(sub.role)}">${sub.role}</span>
                                     </div>
-                                    <div class="text-[10px] text-emerald-300">키맞추기 룸 대기</div>
+                                    <div class="text-[10px] text-emerald-300">연계 종목 · 상승 판정 아님</div>
                                 </div>
                                 <div class="text-right">
                                     <div class="text-xs font-bold text-white">${(sm.current_price || 0).toLocaleString()}원</div>
@@ -724,11 +714,11 @@
 
             document.getElementById('modal-stock-name').innerHTML = `${item.name}`;
             document.getElementById('modal-stock-code').innerText = `${item.code} · ${item.industry || '기타'} · 역할: ${item.role}`;
-            document.getElementById('modal-score').innerText = `${item.score || 0} / 95`;
+            document.getElementById('modal-score').innerText = `${item.score ?? '미확정'} / 100`;
 
-            const prob = item.upside_probability || 85;
-            document.getElementById('modal-upside-badge').innerText = `상승 가능성: ${prob}% (${item.upside_status || '단기 상승 우세'})`;
-            document.getElementById('modal-prob-bar').style.width = `${prob}%`;
+            const prob = item.upside_probability;
+            document.getElementById('modal-upside-badge').innerText = prob == null ? '예측 확률 미산출' : `상승 가능성: ${prob}%`;
+            document.getElementById('modal-prob-bar').style.width = `${prob ?? 0}%`;
             document.getElementById('modal-ai-briefing').innerText = item.ai_briefing || `${item.name} 심층 분석 보고서입니다.`;
 
             const mr = item.metrics?.modal_returns || {};
@@ -744,10 +734,10 @@
 
             const f = item.fundamentals || {};
             document.getElementById('modal-fundamentals-grid').innerHTML = `
-                <div><div class="text-gray-400 text-[10px]">PER</div><div class="font-bold text-gray-200 mt-0.5">${f.per || 14.5}배</div></div>
-                <div><div class="text-gray-400 text-[10px]">PBR</div><div class="font-bold text-gray-200 mt-0.5">${f.pbr || 1.4}배</div></div>
-                <div><div class="text-gray-400 text-[10px]">ROE</div><div class="font-bold text-emerald-400 mt-0.5">${f.roe || 11.2}%</div></div>
-                <div><div class="text-gray-400 text-[10px]">배당수익률</div><div class="font-bold text-cyan-400 mt-0.5">${f.dividend_yield || 2.1}%</div></div>
+                <div><div class="text-gray-400 text-[10px]">PER</div><div class="font-bold text-gray-200 mt-0.5">${f.per ?? '미확보'}배</div></div>
+                <div><div class="text-gray-400 text-[10px]">PBR</div><div class="font-bold text-gray-200 mt-0.5">${f.pbr ?? '미확보'}배</div></div>
+                <div><div class="text-gray-400 text-[10px]">ROE</div><div class="font-bold text-emerald-400 mt-0.5">${f.roe ?? '미확보'}%</div></div>
+                <div><div class="text-gray-400 text-[10px]">배당수익률</div><div class="font-bold text-cyan-400 mt-0.5">${f.dividend_yield ?? '미확보'}%</div></div>
             `;
 
             const tm = item.twenty_metrics || [];
@@ -757,7 +747,7 @@
                     tmHtml += `
                         <div class="flex items-center justify-between p-1.5 bg-[#142036] rounded">
                             <span class="text-gray-300 text-[11px]">${m.name}</span>
-                            <span class="font-bold text-cyan-400 text-xs">${m.score}</span>
+                            <span class="font-bold text-cyan-400 text-xs">${m.score} ${m.value || ''}</span>
                         </div>
                     `;
                 });
@@ -768,25 +758,21 @@
 
             const ss = item.short_selling || {};
             document.getElementById('modal-short-selling-box').innerHTML = `
-                <div>• 공매도 비중: <span class="text-rose-400 font-semibold">${ss.short_ratio || 2.1}%</span></div>
-                <div>• 대차잔고 비율: <span class="text-yellow-400 font-semibold">${ss.balance_ratio || 3.4}%</span></div>
-                <div>• 숏스퀴즈 가능성: <span class="text-emerald-400 font-semibold">${ss.is_short_squeeze ? '높음' : '보통'}</span></div>
+                <div>• 공매도 비중: <span class="text-rose-400 font-semibold">${ss.short_ratio ?? '미확보'}%</span></div>
+                <div>• 대차잔고 비율: <span class="text-yellow-400 font-semibold">${ss.balance_ratio ?? '미확보'}%</span></div>
+                <div>• 숏스퀴즈 가능성: <span class="text-emerald-400 font-semibold">${ss.is_short_squeeze == null ? '미판정' : (ss.is_short_squeeze ? '높음' : '낮음')}</span></div>
             `;
 
-            const dartList = item.dart_timeline || [
-                "• 🎯 수주: 최근 단일판매·공급계약 체결 공시 확인",
-                "• 👔 내부자: 임원진 지분 변동 특이사항 없음",
-                "• ⚠️ 오버행: CB/BW 물량 부담 안정권"
-            ];
+            const dartList = item.dart_timeline || ['종목별 공시 분석 미연결 · 실시간 공시 탭에서 원문 확인'];
             let dartHtml = '';
             dartList.forEach(d => { dartHtml += `<div>${d}</div>`; });
             document.getElementById('modal-dart-box').innerHTML = dartHtml;
 
             const rk = item.risks || {};
             document.getElementById('modal-risk-grid').innerHTML = `
-                <div class="bg-[#142036] p-2.5 rounded"><div class="text-rose-400 font-bold mb-1">단기 리스크</div><div class="text-gray-300 text-[11px]">${rk.short || '정상'}</div></div>
-                <div class="bg-[#142036] p-2.5 rounded"><div class="text-yellow-400 font-bold mb-1">중기 리스크</div><div class="text-gray-300 text-[11px]">${rk.mid || '정상'}</div></div>
-                <div class="bg-[#142036] p-2.5 rounded"><div class="text-sky-400 font-bold mb-1">장기 리스크</div><div class="text-gray-300 text-[11px]">${rk.long || '정상'}</div></div>
+                <div class="bg-[#142036] p-2.5 rounded"><div class="text-rose-400 font-bold mb-1">단기 리스크</div><div class="text-gray-300 text-[11px]">${rk.short || '미분석'}</div></div>
+                <div class="bg-[#142036] p-2.5 rounded"><div class="text-yellow-400 font-bold mb-1">중기 리스크</div><div class="text-gray-300 text-[11px]">${rk.mid || '미분석'}</div></div>
+                <div class="bg-[#142036] p-2.5 rounded"><div class="text-sky-400 font-bold mb-1">장기 리스크</div><div class="text-gray-300 text-[11px]">${rk.long || '미분석'}</div></div>
             `;
 
             document.getElementById('detail-modal').classList.remove('hidden');
@@ -965,31 +951,16 @@
             document.getElementById('guide-modal').classList.add('hidden');
         }
 
-        // 실시간 틱 시뮬레이션 및 1분 스마트 폴링
         setInterval(() => {
-            if (rawStocks.length === 0) return;
-            rawStocks.forEach(item => {
-                const delta = (Math.random() - 0.48) * (item.metrics.current_price * 0.001);
-                item.metrics.current_price = Math.round(item.metrics.current_price + delta);
-                const el = document.getElementById(`price-${item.code}`);
-                if (el) {
-                    el.innerText = item.metrics.current_price.toLocaleString();
-                    el.classList.add('text-cyan-300');
-                    setTimeout(() => el.classList.remove('text-cyan-300'), 800);
-                }
-            });
-        }, 5000);
-
-        setInterval(() => {
-            const activeTab = document.querySelector('.tab-content:not(.hidden)').id;
-            if (activeTab === 'tab-money' || activeTab === 'tab-home') triggerScan(false);
+            const activeTab = document.querySelector('.tab-content:not(.hidden)')?.id;
+            if (activeTab === 'tab-money' || activeTab === 'tab-home') { if (!searchQuery) triggerScan(false); updateMarket(); }
             if (activeTab === 'tab-feed') fetchDisclosures(currentCategory);
             if (activeTab === 'tab-calendar') fetchCalendarData(currentCalMode);
         }, 60000);
 
         window.addEventListener('DOMContentLoaded', () => {
-            triggerScan(false);
+            triggerScan(false); updateMarket(); configureCalendar(); loadGuide();
         });
     </script>
-</body>
+<script src="/revision.js"></script></body>
 </html>
