@@ -10,6 +10,7 @@ import os
 DB_FILE = Path(os.getenv("DB_PATH") or Path(__file__).resolve().parent / "money_flow.db")
 
 def get_connection() -> sqlite3.Connection:
+    DB_FILE.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
@@ -18,6 +19,7 @@ def get_connection() -> sqlite3.Connection:
 def init_db():
     conn = get_connection()
     cursor = conn.cursor()
+    cursor.execute("CREATE TABLE IF NOT EXISTS stock_master(code TEXT PRIMARY KEY,name TEXT,market TEXT)")
 
     # 1. 퀀트 후보 종목 테이블 (2,500개 전 종목 대응)
     cursor.execute("""
@@ -136,6 +138,18 @@ def set_meta(key: str, value: str):
     with conn:
         conn.execute("INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)", (key, value))
     conn.close()
+
+def save_master(universe):
+    conn = get_connection()
+    with conn:
+        conn.executemany("INSERT OR REPLACE INTO stock_master VALUES(?,?,?)", [(c,n,m) for c,(n,m) in universe.items()])
+    conn.close()
+
+def search_master(query):
+    conn = get_connection()
+    rows = conn.execute("SELECT * FROM stock_master WHERE name LIKE ? OR code LIKE ? LIMIT 30", ('%'+query+'%', '%'+query+'%')).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 def insert_disclosures(rows: list[dict]) -> int:
     """rcept_no 기준 중복 무시. 새로 들어간 건수 반환"""
