@@ -18,8 +18,8 @@ EXCLUDE_KEYWORDS = [
     "액티브", "국채", "채권", "MSCI", "S&P", "나스닥", "NASDAQ", "다우",
     "금현물", "원유", "TR"
 ]
-HISTORY_COUNT = 250
-STOCK_PAGES = 3
+HISTORY_COUNT = 450
+STOCK_PAGES = 200
 REQUEST_TIMEOUT = 6
 INVESTOR_TIMEOUT = 4
 MAX_WORKERS = 8
@@ -185,16 +185,16 @@ def fetch_naver_chart(ticker: str, headers: Dict[str, str]) -> List[Dict[str, fl
             if len(parts) < 6:
                 continue
 
-            close_p = safe_float(parts[1])
+            close_p = safe_float(parts[4])
             if close_p <= 0:
                 continue
 
             rows.append({
                 "date": parts[0],
                 "close": close_p,
-                "open": safe_float(parts[2]),
-                "high": safe_float(parts[3]),
-                "low": safe_float(parts[4]),
+                "open": safe_float(parts[1]),
+                "high": safe_float(parts[2]),
+                "low": safe_float(parts[3]),
                 "volume": safe_float(parts[5]),
             })
 
@@ -394,9 +394,9 @@ def score_20_indicators(
 
     # 16 52주신고가 (5점)
     if gap52 >= 0: add("score_16", 5, "52주신고가", True)
-    elif gap52 >= -1: add("score_16", 4, "52주신고가", True)
-    elif gap52 >= -3: add("score_16", 3, "52주신고가", True)
-    elif gap52 >= -10: add("score_16", 1, "52주신고가")
+    elif gap52 >= -3: add("score_16", 4, "52주신고가", True)
+    elif gap52 >= -10: add("score_16", 3, "52주신고가", True)
+    elif gap52 >= -20: add("score_16", 1, "52주신고가")
     else: add("score_16", 0, "52주신고가")
 
     # 17 전고점돌파 (5점)
@@ -404,8 +404,8 @@ def score_20_indicators(
     br_r = ((close_p / prev_h) - 1) * 100 if prev_h > 0 else -100
     if br_r > 0 and vr >= 150: add("score_17", 5, "전고점돌파", True)
     elif br_r > 0: add("score_17", 4, "전고점돌파", True)
-    elif br_r >= -2: add("score_17", 3, "전고점돌파")
-    elif br_r >= -5: add("score_17", 1, "전고점돌파")
+    elif br_r >= -3: add("score_17", 3, "전고점돌파")
+    elif br_r >= -10: add("score_17", 1, "전고점돌파")
     else: add("score_17", 0, "전고점돌파")
 
     # 18 RSI(14) (4점)
@@ -495,6 +495,11 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
     hist = fetch_naver_chart(code, headers)
     if len(hist) < 21:
         return None
+    now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9)))
+    if now.time() < datetime.time(15, 45):
+        hist = [h for h in hist if h['date'] < now.strftime('%Y%m%d')]
+    if len(hist) < 21:
+        return None
     last, prev = hist[-1], hist[-2]
     close_p, open_p, high_p, low_p, vol = last["close"], last["open"], last["high"], last["low"], last["volume"]
     chg = (close_p / prev["close"] - 1) * 100 if prev["close"] > 0 else 0.0
@@ -514,7 +519,7 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
     tags = [t for t in sc["passed_tags"].split(",") if t]
     sector, role, _ = get_stock_profile(name)
     note = "" if flow_ok else " (수급 조회 실패: 수급 지표 제외 환산)"
-    return {
+    record = {
         "code": code, "name": name, "industry": sector, "role": role,
         "score": int(total), "max_score": MAX_TOTAL, "grade": grade_from_score(int(total * 100 / MAX_TOTAL)),
         "foreign_inst_net": int((f1 + i1) * close_p), "flow_ok": flow_ok, "double_buy": sc["double_buy"],
@@ -530,6 +535,28 @@ def analyze(code: str, name: str, headers: Dict[str, str]) -> Optional[Dict]:
         "upside_probability": int(min(95, max(5, total / MAX_TOTAL * 90))),  # 점수 기반 단순 환산(통계적 확률 아님)
         "passed_tags": sc["passed_tags"],
     }
+    rows = []
+    try:
+        response = requests.get(f'https://m.stock.naver.com/api/stock/{code}/trend', headers=headers, timeout=INVESTOR_TIMEOUT)
+        response.raise_for_status()
+        js = response.json()
+        rows = js if isinstance(js, list) else (js.get('result') or js.get('message', {}).get('result', []))
+    except (requests.RequestException, ValueError, AttributeError):
+        pass
+    from details import enrich
+    record = enrich(record, hist, rows)
+    values = [f'{chg:.2f}%', f'{deal/1e8:.2f}억 원 (추정)', f'{tech["volume_ratio"]:.2f}%',
+              f'{tech["ma20"]:,.0f}원', f'{sc["gap_52w"]:.2f}%', f'{(close_p/open_p-1)*100:.2f}%' if open_p else '미확보',
+              f'{sc["close_position"]:.2f}%', f'{sc["upper_tail_ratio"]:.2f}%',
+              f'5일 {tech["ma5"]:.0f} / 10일 {tech["ma10"]:.0f} / 20일 {tech["ma20"]:.0f}',
+              f'{f1}주 (조회 상태 확인)' if flow_ok else '미확보', f'{i1}주 (조회 상태 확인)' if flow_ok else '미확보',
+              f'{sc["net_buy_ratio"]:.2f}% (추정)' if flow_ok else '미확보',
+              f'{tech["ma5"]:.0f}원', f'{tech["ma60"]:.0f}원', f'{tech["ma120"]:.0f}원',
+              f'{tech["high_52w"]:.0f}원', f'{tech["previous_high_60"]:.0f}원',
+              f'{tech["rsi14"]:.2f}', f'{tech["disparity20"]:.2f}%', f'{tech["macd"]:.2f}']
+    for metric,value in zip(record['twenty_metrics'], values):
+        metric['value'] = value
+    return record
 
 
 def build_universe(headers: Dict[str, str]) -> Dict[str, Tuple[str, str]]:
@@ -544,7 +571,8 @@ def build_universe(headers: Dict[str, str]) -> Dict[str, Tuple[str, str]]:
                 code = str(it.get("itemCode") or it.get("code") or "").strip()
                 name = str(it.get("stockName") or it.get("name") or "").strip()
                 if code and name and is_pure_stock(code, name):
-                    uni.setdefault(code, (name, market))
+                    uni[code] = (name, market)
+    db.save_master(uni)
     return uni
 
 
@@ -555,6 +583,7 @@ def run_full_scan(label: str = "scan", on_done=None) -> int:
         headers = get_headers()
         uni = build_universe(headers)
         records = []
+        db.set_meta('scan_status', '수집 중')
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
             futs = [ex.submit(analyze, c, n, headers) for c, (n, _m) in uni.items()]
             for f in as_completed(futs):
@@ -562,6 +591,8 @@ def run_full_scan(label: str = "scan", on_done=None) -> int:
                     r = f.result()
                     if r:
                         records.append(r)
+                        if len(records) % 20 == 0:
+                            db.upsert_candidates_bulk(records[-20:], '수집 중')
                 except Exception:
                     pass
         if records:  # 전부 실패했을 때 기존 데이터를 덮어쓰지 않음
@@ -570,6 +601,7 @@ def run_full_scan(label: str = "scan", on_done=None) -> int:
             if on_done:
                 on_done({r["code"]: r["name"] for r in records})
         print(f"[{label}] 대상 {len(uni)}개 / 저장 {len(records)}개")
+        db.set_meta('scan_status', f'대상 {len(uni)} / 분석 완료 {len(records)}')
         return len(records)
     finally:
         _scan_lock.release()
