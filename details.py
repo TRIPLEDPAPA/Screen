@@ -32,6 +32,7 @@ def enrich(record, history, flow_rows):
                 try: return int(str(row[key]).replace(',',''))
                 except ValueError: return None
         return None
+    if not record.get('flow_ok'): flow_rows=[]
     fs=[value(r,['foreignerPureBuyQuant','frgnPureBuyQuant']) for r in flow_rows]
     ins=[value(r,['organPureBuyQuant','instPureBuyQuant']) for r in flow_rows]
     f=fs[0] if fs else None
@@ -46,23 +47,28 @@ def enrich(record, history, flow_rows):
             if v is None or v<=0: break
             count+=1
         return count
-    metrics=record['twenty_metrics']
+    metrics=record['indicator_metrics']
     if not record.get('flow_ok'):
         for index,maximum in [(9,6),(10,5),(11,5)]:
             metrics[index]['score']=f'미확보/{maximum}'
     for index,maximum in [(17,3),(18,3),(19,1)]:
         metrics[index]['score']=f'미확정/{maximum}'
-    metrics.extend([{'name':'볼린저 상단 돌파','score':'미확정/2'},
-                    {'name':'볼린저 스퀴즈 후 확산','score':'미확정/2'}])
-    for values,name in [(fs,'외국인 연속 순매수'),(ins,'기관 연속 순매수')]:
-        count=streak(values)
-        metrics.append({'name':name,'score':f'{2 if count>=3 else 0}/2' if count is not None else '미확보/2',
-                        'value':f'{count}거래일' if count is not None else '미확보'})
+    from research import bollinger_score
+    bb=bollinger_score(history)
+    metrics.append({'name':'볼린저 밴드','score':f"{bb['score']}/4" if bb['score'] is not None else '미확보/4','value':('상단 돌파·터치 '+str(2 if bb.get('touch') else 0)+'/2 · 수축 후 상승 확산 '+str(2 if bb.get('squeeze_expansion') else 0)+'/2 · '+bb['basis']) if bb.get('score') is not None else bb.get('status')})
+    record['bollinger_score_details']=bb
+    counts=[streak(fs),streak(ins)]
+    continuity=sum(2 if c>=3 else 0 for c in counts if c is not None)
+    metrics.append({'name':'외국인·기관 수급 연속성','score':f'{continuity}/4' if all(c is not None for c in counts) else '미확보/4',
+                    'value':' / '.join(f'{name}: {c}거래일 (2점)' if c is not None and c>=3 else f'{name}: {c}거래일 (0점)' if c is not None else f'{name}: 미확보' for name,c in zip(['외국인','기관'],counts))})
+    for index,metric in enumerate(metrics,1): metric['id']=f'score_{index:02d}'
+    assert len(metrics)==22
+    assert sum(int(m['score'].split('/')[-1]) for m in metrics)==100
     record['partial_score']=sum(int(m['score'].split('/')[0]) for m in metrics if m['score'].split('/')[0].isdigit())
-    record['score_status']='RSI·이격도·MACD 세부 구간 및 볼린저 조건 미확정'
+    record['score_status']='RSI·이격도·MACD 세부 구간 미확정'
     record['score']=None
     record['max_score']=100
     record['upside_probability']=None
-    record['ai_briefing']='확정 일봉 기반 분석입니다. 일부 점수 기준이 미확정이므로 총점과 고득점 배지는 보류합니다. 실제 AI API는 아직 연결되지 않았습니다.'
+    record['ai_briefing']='확정 일봉 기반 분석입니다. 일부 점수 기준이 미확정이므로 총점과 고득점 배지는 보류합니다. 상세 자료 취합 후 Gemini 종합 분석 버튼을 사용하세요.'
     record['fundamentals']={}
     return record
