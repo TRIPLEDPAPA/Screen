@@ -11,6 +11,7 @@ from collections import deque
 from typing import Dict, Optional
 
 import requests
+import kis
 
 KST = dt.timezone(dt.timedelta(hours=9))
 URL = "https://polling.finance.naver.com/api/realtime"
@@ -38,7 +39,8 @@ class TickEngine:
         self.cond = dict(DEFAULT_COND)
         self.captured: deque = deque(maxlen=300)
         self._last_cap: Dict[str, float] = {}
-        self.demo = os.getenv("TICK_DEMO") == "1"
+        self.demo = False
+        self._cursor=0
         self.status = {"mode": "idle", "updated": "", "error": ""}
         self._started = False
 
@@ -89,7 +91,20 @@ class TickEngine:
         if not codes:
             self.status.update(mode="idle", error="종목 유니버스가 비어 있습니다(스캔 대기 중)")
             return
-        data = self._fetch_demo(codes) if self.demo else self._fetch_naver(codes)
+        if kis.configured():
+            # 전체 시장 순회. 종목별 갱신 주기는 목록 크기에 따라 다름. 체결 스트리밍 아님.
+            batch=(codes+codes)[self._cursor:self._cursor+min(10,len(codes))]
+            self._cursor=(self._cursor+len(batch))%len(codes)
+            data={}
+            for code in batch:
+                q=kis.quote(code)
+                price=float(q.get('stck_prpr') or 0);chg=float(q.get('prdy_ctrt') or 0)
+                prev=float(q.get('stck_prpr') or 0)-float(q.get('prdy_vrss') or 0)
+                if price>0:data[code]={'price':price,'prev':prev,'chg':chg,'vol':float(q.get('acml_vol') or 0),'amt':float(q.get('acml_tr_pbmn') or 0),'high':float(q.get('stck_hgpr') or price)}
+            self.status['source']='한투 REST 순회 조회 · 체결 스트리밍 아님'
+        else:
+            data=self._fetch_naver(codes)
+            self.status['source']='네이버 폴링 · 한투 키 미등록' 
         ts = now_kst()
         with self.lock:
             for c, d in data.items():
