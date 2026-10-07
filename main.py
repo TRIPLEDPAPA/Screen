@@ -27,6 +27,8 @@ import db      # noqa: E402
 import dart    # noqa: E402
 import quant   # noqa: E402
 import market_data
+import kis
+import stock_master
 from tick import engine as tick_engine  # noqa: E402
 
 def get_kst_time() -> tuple[dt.datetime, str]:
@@ -69,7 +71,7 @@ async def lifespan(app: FastAPI):
     db.init_db()
     cands = db.get_all_candidates()
     tick_engine.set_universe({c["code"]: c["name"] for c in cands})
-    if not cands:
+    if not cands or any(c.get('schema_version')!=2 for c in cands):
         start_async(scan_job, "초기 부팅 스캔")
     start_async(dart.sync, True)       # 공시 당일분 백필
     tick_engine.start()
@@ -113,7 +115,7 @@ def month_calendar(month: str = Query(pattern=r'^\d{4}-\d{2}$'), category: str =
         return JSONResponse({'data':[],'status':'일정 파일 형식 오류'},status_code=503)
 
 
-@app.get("/", response_class=HTMLResponse)
+@app.api_route("/", methods=["GET","HEAD"], response_class=HTMLResponse)
 async def read_index():
     index_file = Path(__file__).resolve().parent / "index.html"
     if index_file.exists():
@@ -128,29 +130,29 @@ def healthz():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "candidates": len(db.get_all_candidates()), "tick": tick_engine.status, "dart": db.disclosure_stats()}
+    return {"ok": True, "candidates": len(db.get_all_candidates()), "tick": tick_engine.status, "dart": db.disclosure_stats(), "kis": kis.status(), "revision": "2026-10-07-kis-v2"}
 
 
 @app.get("/api/scan")
 async def api_scan(force: bool = Query(False)):
     if force:
         start_async(scan_job, "수동 스캔")
-    candidates = db.get_all_candidates()
+    candidates = [c for c in db.get_all_candidates() if c.get('schema_version')==2]
     _, time_str = get_kst_time()
     return JSONResponse({"time_str": db.get_meta("base_time", time_str), "count": len(candidates),
-                         "results": candidates[:100], "market": market_data.snapshot(), 'scan_status': db.get_meta('scan_status')})
+                         "results": candidates, "market": market_data.snapshot(), 'scan_status': db.get_meta('scan_status')})
 
 @app.get('/api/search')
 def search(q: str = Query(min_length=1, max_length=80)):
     analyzed={r['code']:r for r in db.get_all_candidates()}
-    return {'results':[analyzed.get(r['code'], {**r,'analysis_pending':True}) for r in db.search_master(q)]}
+    return {'results':[analyzed.get(r['code'], {**r,**(stock_master.profile(r['code']) or {}),'analysis_pending':True}) for r in db.search_master(q)]}
 
 @app.post('/api/analyze/{code}')
 def analyze_one(code: str):
     rows=[r for r in db.search_master(code) if r['code']==code]
     if not rows: return JSONResponse({'error':'등록되지 않은 종목'},status_code=404)
     result=quant.analyze(code,rows[0]['name'],quant.get_headers())
-    if not result: return JSONResponse({'error':'일봉 수집 실패 또는 데이터 부족'},status_code=503)
+    if not result: return JSONResponse({'error':kis.status()['status'] if kis.configured() else '일봉 수집 실패 또는 데이터 부족'},status_code=503)
     db.upsert_candidates_bulk([result],get_kst_time()[0].strftime('%H:%M'))
     return result
 
@@ -189,3 +191,16 @@ def economic_calendar(week: str = ""):
 @app.get("/api/calendar/earnings")
 def earnings_calendar(week: str = ""):
     return {"data": [], "status": "월별 API 사용 · 일정 데이터 미연결"}
+
+@app.get('/api/kis/check')
+def check_kis():
+    try:
+        row=kis.quote('005930')
+        return {**kis.status(),'quote_ok':True,'code':'005930','price':row.get('stck_prpr')}
+    except RuntimeError as e:
+        return JSONResponse({**kis.status(),'quote_ok':False,'error':str(e)},status_code=503)
+
+@app.get('/api/master/status')
+def master_status():
+    data=stock_master.read()
+    return {'count':len(data.get('rows',[])),'collected_at':data.get('collected_at'),'classification':data.get('classification'),'status':db.get_meta('master_status',data.get('status'))}
