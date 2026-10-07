@@ -29,6 +29,8 @@ import quant   # noqa: E402
 import market_data
 import kis
 import stock_master
+import research
+import calendar_data
 from tick import engine as tick_engine  # noqa: E402
 
 def get_kst_time() -> tuple[dt.datetime, str]:
@@ -71,7 +73,7 @@ async def lifespan(app: FastAPI):
     db.init_db()
     cands = db.get_all_candidates()
     tick_engine.set_universe({c["code"]: c["name"] for c in cands})
-    if not cands or any(c.get('schema_version')!=2 for c in cands):
+    if not cands or any(c.get('schema_version')!=4 for c in cands):
         start_async(scan_job, "초기 부팅 스캔")
     start_async(dart.sync, True)       # 공시 당일분 백필
     tick_engine.start()
@@ -106,13 +108,11 @@ def market():
 
 @app.get('/api/calendar/month')
 def month_calendar(month: str = Query(pattern=r'^\d{4}-\d{2}$'), category: str = 'economic'):
-    path=Path(__file__).parent/'calendar_events.json'
     try:
-        events=json.loads(path.read_text()) if path.exists() else []
-        data=[x for x in events if x.get('category')==category and str(x.get('date','')).startswith(month)]
-        return {'data':data,'status':'등록된 출처 기반 일정' if data else '일정 데이터 미연결'}
-    except (ValueError,TypeError):
-        return JSONResponse({'data':[],'status':'일정 파일 형식 오류'},status_code=503)
+        return calendar_data.month_events(month,category)
+    except (ValueError,requests.RequestException):
+        return JSONResponse({'data':[],'status':'일정 조회 실패 · 월/연결 확인'},status_code=503)
+
 
 
 @app.api_route("/", methods=["GET","HEAD"], response_class=HTMLResponse)
@@ -130,21 +130,21 @@ def healthz():
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "candidates": len(db.get_all_candidates()), "tick": tick_engine.status, "dart": db.disclosure_stats(), "kis": kis.status(), "revision": "2026-10-07-kis-v2"}
+    return {"ok": True, "candidates": len(db.get_all_candidates()), "tick": tick_engine.status, "dart": db.disclosure_stats(), "kis": kis.status(), "revision": "2026-10-07-v6"}
 
 
 @app.get("/api/scan")
 async def api_scan(force: bool = Query(False)):
     if force:
         start_async(scan_job, "수동 스캔")
-    candidates = [c for c in db.get_all_candidates() if c.get('schema_version')==2]
+    candidates = [c for c in db.get_all_candidates() if c.get('schema_version')==4]
     _, time_str = get_kst_time()
     return JSONResponse({"time_str": db.get_meta("base_time", time_str), "count": len(candidates),
                          "results": candidates, "market": market_data.snapshot(), 'scan_status': db.get_meta('scan_status')})
 
 @app.get('/api/search')
 def search(q: str = Query(min_length=1, max_length=80)):
-    analyzed={r['code']:r for r in db.get_all_candidates()}
+    analyzed={r['code']:r for r in db.get_all_candidates() if r.get('schema_version')==4}
     return {'results':[analyzed.get(r['code'], {**r,**(stock_master.profile(r['code']) or {}),'analysis_pending':True}) for r in db.search_master(q)]}
 
 @app.post('/api/analyze/{code}')
@@ -204,3 +204,54 @@ def check_kis():
 def master_status():
     data=stock_master.read()
     return {'count':len(data.get('rows',[])),'collected_at':data.get('collected_at'),'classification':data.get('classification'),'status':db.get_meta('master_status',data.get('status'))}
+
+@app.get('/api/research/{code}')
+def research_stock(code: str):
+    record=next((r for r in db.get_all_candidates() if r['code']==code),None)
+    if not record:return JSONResponse({'error':'종목 분석을 먼저 실행하세요'},status_code=404)
+    cache=db.get_meta('research:'+code)
+    if cache:
+        try:
+            cached=json.loads(cache)
+            if (dt.datetime.now(dt.timezone.utc)-dt.datetime.fromisoformat(cached['researched_at'])).total_seconds()<300:return cached
+        except (ValueError,KeyError,TypeError):pass
+    data=research.detail(record)
+    db.set_meta('research:'+code,json.dumps(data,ensure_ascii=False))
+    return data
+
+@app.post('/api/research/{code}/ai')
+def research_ai(code: str):
+    record=next((r for r in db.get_all_candidates() if r['code']==code),None)
+    if not record:return JSONResponse({'error':'종목 분석을 먼저 실행하세요'},status_code=404)
+    try:return {'analysis':research.ai(research.detail(record)),'status':'AI 분석 완료'}
+    except RuntimeError as e:return JSONResponse({'error':str(e)},status_code=503)
+
+@app.get('/diagnostics.html')
+def diagnostics_page():
+    return FileResponse(Path(__file__).parent/'diagnostics.html',media_type='text/html')
+
+@app.get('/api/readiness')
+def readiness():
+    return {'revision':'v6','kis':kis.status(),'dart_key':bool(os.getenv('DART_API_KEY') or os.getenv('DART_KEY')),'gemini_key':bool(os.getenv('GEMINI_API_KEY') or os.getenv('GOOGLE_API_KEY')),'gemini_model_configured':bool(os.getenv('GEMINI_MODEL')),'news_keys':all(os.getenv(k) for k in ['NAVER_CLIENT_ID','NAVER_CLIENT_SECRET']),'calendar_key':bool(os.getenv('FINNHUB_API_KEY')),'persistent_db_path_configured':bool(os.getenv('DB_PATH')),'score_policy':'RSI/이격도/MACD 기준안 검토 대기 · 총점 보류','master_count':len(stock_master.read().get('rows',[]))}
+
+@app.post('/api/recommendations/{code}')
+def evaluate_recommendation(code: str):
+    record=next((r for r in db.get_all_candidates() if r['code']==code),None)
+    if not record:return JSONResponse({'error':'먼저 종목 분석을 실행하세요'},status_code=404)
+    try:
+        result=research.news_candidate(research.detail(record))
+        db.set_meta('recommendation:'+code,json.dumps(result,ensure_ascii=False))
+        return result
+    except RuntimeError as e:return JSONResponse({'error':str(e)},status_code=503)
+
+@app.get('/api/recommendations')
+def recommendations():
+    with db.get_connection() as conn:
+        values=conn.execute("SELECT value FROM meta WHERE key LIKE 'recommendation:%'").fetchall()
+    results=[]
+    for value in values:
+        try:
+            row=json.loads(value[0])
+            if row.get('decision')=='candidate':results.append(row)
+        except (TypeError,ValueError):pass
+    return {'results':results,'basis':'기사 AI 평가를 완료한 상승 후보만 표시 · 전체 시장 자동평가가 아님'}
